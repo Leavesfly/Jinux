@@ -9,6 +9,11 @@ echo ""
 
 cd "$(dirname "$0")"
 
+# 设置 JAVA_HOME 为 Java 17
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+echo "[INFO] Using Java: $JAVA_HOME"
+echo ""
+
 echo "[BUILD] Compiling with Maven..."
 mvn -q compile
 

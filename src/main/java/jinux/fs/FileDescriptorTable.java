@@ -56,8 +56,33 @@ public class FileDescriptorTable {
      */
     public synchronized void close(int fd) {
         if (fd >= 0 && fd < files.length) {
+            File file = files[fd];
+            if (file != null) {
+                file.decrementRef();
+            }
             files[fd] = null;
         }
+    }
+    
+    /**
+     * 设置文件描述符（用于 dup2）
+     * 
+     * @param fd 文件描述符
+     * @param file 文件对象
+     * @return 是否成功
+     */
+    public synchronized boolean set(int fd, File file) {
+        if (fd < 0 || fd >= files.length) {
+            return false;
+        }
+        
+        // 如果该位置已有文件，先关闭
+        if (files[fd] != null) {
+            files[fd].decrementRef();
+        }
+        
+        files[fd] = file;
+        return true;
     }
     
     /**

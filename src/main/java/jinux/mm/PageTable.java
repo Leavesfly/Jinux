@@ -25,6 +25,7 @@ public class PageTable {
     public static final int PAGE_PRESENT = 0x001;  // 页面存在
     public static final int PAGE_RW = 0x002;        // 可读写
     public static final int PAGE_USER = 0x004;      // 用户态可访问
+    public static final int PAGE_COW = 0x008;        // 写时复制标记
     
     /**
      * 构造空页表
@@ -135,5 +136,25 @@ public class PageTable {
      */
     public int getMappedPageCount() {
         return mappings.size();
+    }
+    
+    /**
+     * 获取页面标志
+     * 
+     * @param vpage 虚拟页号
+     * @return 页面标志，如果不存在返回null
+     */
+    public Integer getFlags(int vpage) {
+        return flags.get(vpage);
+    }
+    
+    /**
+     * 设置页面标志
+     * 
+     * @param vpage 虚拟页号
+     * @param pageFlags 页面标志
+     */
+    public void setFlags(int vpage, int pageFlags) {
+        flags.put(vpage, pageFlags);
     }
 }

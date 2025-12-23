@@ -133,6 +133,27 @@ public class AddressSpace {
      * @param value 字节值
      */
     public void writeByte(long vaddr, byte value) {
+        int vpage = (int) (vaddr >> Const.PAGE_SHIFT);
+        
+        // 检查页面权限
+        Integer flags = pageTable.getFlags(vpage);
+        if (flags == null) {
+            throw new PageFaultException("Page not present at vaddr: 0x" + Long.toHexString(vaddr));
+        }
+        
+        // 检查是否为COW页面
+        if ((flags & PageTable.PAGE_COW) != 0) {
+            // 处理写时复制
+            int newPpage = handleCopyOnWrite(vpage);
+            if (newPpage < 0) {
+                throw new PageFaultException("Copy-on-write failed at vaddr: 0x" + Long.toHexString(vaddr));
+            }
+        } else if ((flags & PageTable.PAGE_RW) == 0) {
+            // 页面是只读的
+            throw new PageFaultException("Page is read-only at vaddr: 0x" + Long.toHexString(vaddr));
+        }
+        
+        // 重新翻译地址（可能已经改变）
         long paddr = pageTable.translate(vaddr);
         if (paddr < 0) {
             throw new PageFaultException("Page not present at vaddr: 0x" + Long.toHexString(vaddr));
@@ -171,36 +192,34 @@ public class AddressSpace {
     
     /**
      * 复制地址空间（用于 fork）
+     * 实现写时复制（Copy-On-Write）优化
      * 
      * @return 新的地址空间副本
      */
     public AddressSpace copy() {
         AddressSpace newSpace = new AddressSpace(memoryManager);
         
-        // 复制页表（写时复制优化可以在这里实现）
-        // 简化实现：直接复制所有页面
+        // 复制页表（使用写时复制优化）
         PageTable oldTable = this.pageTable;
         PageTable newTable = newSpace.pageTable;
+        PhysicalMemory pm = memoryManager.getPhysicalMemory();
         
-        // 这里应该实现写时复制（COW），但为简化先直接复制
-        // TODO: 实现 COW
         for (int vpage = 0; vpage < Const.TASK_SIZE >> Const.PAGE_SHIFT; vpage++) {
             if (oldTable.isMapped(vpage)) {
                 int oldPpage = oldTable.getPhysicalPage(vpage);
-                int newPpage = memoryManager.allocatePage();
+                Integer oldFlags = oldTable.getFlags(vpage);
                 
-                if (newPpage >= 0) {
-                    // 复制页面内容
-                    long srcAddr = ((long) oldPpage) << Const.PAGE_SHIFT;
-                    long dstAddr = ((long) newPpage) << Const.PAGE_SHIFT;
+                if (oldPpage >= 0 && oldFlags != null) {
+                    // 增加物理页面的引用计数
+                    pm.incrementPageRef(oldPpage);
                     
-                    PhysicalMemory pm = memoryManager.getPhysicalMemory();
-                    byte[] tempBuf = new byte[Const.PAGE_SIZE];
-                    pm.readBytes(srcAddr, tempBuf, 0, Const.PAGE_SIZE);
-                    pm.writeBytes(dstAddr, tempBuf, 0, Const.PAGE_SIZE);
+                    // 将页面标记为只读和COW
+                    // 新页表和旧页表都指向同一个物理页面，但标记为只读
+                    int newFlags = (oldFlags & ~PageTable.PAGE_RW) | PageTable.PAGE_COW;
+                    newTable.map(vpage, oldPpage, newFlags);
                     
-                    // 映射到新页表
-                    newTable.map(vpage, newPpage, PageTable.PAGE_PRESENT | PageTable.PAGE_RW | PageTable.PAGE_USER);
+                    // 同时将旧页表的页面也标记为COW和只读
+                    oldTable.setFlags(vpage, newFlags);
                 }
             }
         }
@@ -214,6 +233,61 @@ public class AddressSpace {
         newSpace.stackTop = this.stackTop;
         
         return newSpace;
+    }
+    
+    /**
+     * 处理写时复制：当写入COW页面时，复制页面
+     * 
+     * 这是 COW 机制的核心：当进程尝试写入共享页面时，
+     * 如果页面被多个进程共享（引用计数 > 1），则复制页面。
+     * 如果只有当前进程使用（引用计数 = 1），则直接修改。
+     * 
+     * @param vpage 虚拟页号
+     * @return 新的物理页号，如果失败返回-1
+     */
+    private int handleCopyOnWrite(int vpage) {
+        Integer oldFlags = pageTable.getFlags(vpage);
+        if (oldFlags == null || (oldFlags & PageTable.PAGE_COW) == 0) {
+            return -1; // 不是COW页面
+        }
+        
+        int oldPpage = pageTable.getPhysicalPage(vpage);
+        if (oldPpage < 0) {
+            return -1;
+        }
+        
+        PhysicalMemory pm = memoryManager.getPhysicalMemory();
+        
+        // 如果引用计数为1，可以直接修改，不需要复制
+        if (pm.getPageRefCount(oldPpage) == 1) {
+            // 清除COW标记，恢复写权限
+            int newFlags = (oldFlags & ~PageTable.PAGE_COW) | PageTable.PAGE_RW;
+            pageTable.setFlags(vpage, newFlags);
+            return oldPpage;
+        }
+        
+        // 需要复制页面
+        int newPpage = memoryManager.allocatePage();
+        if (newPpage < 0) {
+            return -1; // 内存不足
+        }
+        
+        // 复制页面内容
+        long srcAddr = ((long) oldPpage) << Const.PAGE_SHIFT;
+        long dstAddr = ((long) newPpage) << Const.PAGE_SHIFT;
+        
+        byte[] tempBuf = new byte[Const.PAGE_SIZE];
+        pm.readBytes(srcAddr, tempBuf, 0, Const.PAGE_SIZE);
+        pm.writeBytes(dstAddr, tempBuf, 0, Const.PAGE_SIZE);
+        
+        // 减少旧页面的引用计数
+        memoryManager.freePage(oldPpage);
+        
+        // 更新页表映射，清除COW标记，恢复写权限
+        int newFlags = (oldFlags & ~PageTable.PAGE_COW) | PageTable.PAGE_RW;
+        pageTable.map(vpage, newPpage, newFlags);
+        
+        return newPpage;
     }
     
     /**

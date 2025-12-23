@@ -1,6 +1,7 @@
 package jinux.shell;
 
 import jinux.drivers.ConsoleDevice;
+import jinux.fs.File;
 import jinux.kernel.Kernel;
 import jinux.kernel.Scheduler;
 import jinux.kernel.Signal;
@@ -92,6 +93,33 @@ public class SimpleShell {
      * 执行命令
      */
     private void executeCommand(String line) {
+        // 检查是否有后台执行标记
+        boolean background = false;
+        if (line.trim().endsWith("&")) {
+            background = true;
+            line = line.trim().substring(0, line.trim().length() - 1).trim();
+        }
+        
+        // 检查是否有管道
+        if (line.contains("|")) {
+            executePipe(line, background);
+            return;
+        }
+        
+        // 检查是否有重定向
+        if (line.contains(">") || line.contains("<") || line.contains(">>")) {
+            executeRedirect(line, background);
+            return;
+        }
+        
+        // 普通命令执行
+        executeSimpleCommand(line, background);
+    }
+    
+    /**
+     * 执行简单命令（无管道、无重定向）
+     */
+    private void executeSimpleCommand(String line, boolean background) {
         // 解析命令行
         String[] parts = parseCommandLine(line);
         if (parts.length == 0) {
@@ -102,7 +130,23 @@ public class SimpleShell {
         String[] args = new String[parts.length - 1];
         System.arraycopy(parts, 1, args, 0, args.length);
         
+        if (background) {
+            // 后台执行：在单独的线程中执行
+            new Thread(() -> {
+                executeBuiltinCommand(command, args);
+            }, "shell-bg-" + command).start();
+            console.println("[" + command + "] Running in background...");
+            return;
+        }
+        
         // 执行内置命令
+        executeBuiltinCommand(command, args);
+    }
+    
+    /**
+     * 执行内置命令
+     */
+    private void executeBuiltinCommand(String command, String[] args) {
         switch (command) {
             case "help":
                 cmdHelp(args);
@@ -164,6 +208,161 @@ public class SimpleShell {
             }
         }
         return tokens.toArray(new String[0]);
+    }
+    
+    /**
+     * 执行管道命令
+     * 例如：echo "hello" | echo
+     */
+    private void executePipe(String line, boolean background) {
+        String[] commands = line.split("\\|");
+        if (commands.length < 2) {
+            console.println("Syntax error: pipe requires at least two commands");
+            return;
+        }
+        
+        console.println("[SHELL] Executing pipe: " + line);
+        
+        // 简化实现：顺序执行命令，将前一个命令的输出作为后一个命令的输入
+        // 实际实现应该使用 pipe 系统调用创建管道
+        
+        List<String> outputs = new ArrayList<>();
+        
+        for (int i = 0; i < commands.length; i++) {
+            String cmdLine = commands[i].trim();
+            if (cmdLine.isEmpty()) {
+                continue;
+            }
+            
+            // 执行命令并捕获输出
+            String output = executeCommandAndCaptureOutput(cmdLine);
+            if (output != null && !output.isEmpty()) {
+                outputs.add(output);
+            }
+        }
+        
+        // 打印最后一个命令的输出
+        if (!outputs.isEmpty()) {
+            console.println(outputs.get(outputs.size() - 1));
+        }
+    }
+    
+    /**
+     * 执行重定向命令
+     * 例如：echo "hello" > file.txt
+     */
+    private void executeRedirect(String line, boolean background) {
+        // 解析重定向
+        String inputFile = null;
+        String outputFile = null;
+        boolean append = false;
+        String command = line;
+        
+        // 检查输入重定向 <
+        if (line.contains("<")) {
+            String[] parts = line.split("<", 2);
+            if (parts.length == 2) {
+                command = parts[0].trim();
+                inputFile = parts[1].trim();
+            }
+        }
+        
+        // 检查输出重定向 > 或 >>
+        if (line.contains(">>")) {
+            String[] parts = line.split(">>", 2);
+            if (parts.length == 2) {
+                command = parts[0].trim();
+                outputFile = parts[1].trim();
+                append = true;
+            }
+        } else if (line.contains(">")) {
+            String[] parts = line.split(">", 2);
+            if (parts.length == 2) {
+                command = parts[0].trim();
+                outputFile = parts[1].trim();
+                append = false;
+            }
+        }
+        
+        console.println("[SHELL] Executing redirect: " + line);
+        console.println("  Command: " + command);
+        if (inputFile != null) {
+            console.println("  Input from: " + inputFile);
+        }
+        if (outputFile != null) {
+            console.println("  Output to: " + outputFile + (append ? " (append)" : " (overwrite)"));
+        }
+        
+        // 执行命令并捕获输出
+        String output = executeCommandAndCaptureOutput(command);
+        
+        // 处理输出重定向
+        if (outputFile != null) {
+            try {
+                // 使用 LibC 写入文件
+                int flags = File.O_CREAT | File.O_WRONLY;
+                if (append) {
+                    flags |= File.O_APPEND;
+                } else {
+                    flags |= File.O_TRUNC;
+                }
+                
+                int fd = libc.open(outputFile, flags, 0644);
+                if (fd >= 0) {
+                    byte[] data = output.getBytes();
+                    libc.write(fd, data, data.length);
+                    libc.close(fd);
+                    console.println("[SHELL] Output written to: " + outputFile);
+                } else {
+                    console.println("[SHELL] Failed to open file: " + outputFile);
+                }
+            } catch (Exception e) {
+                console.println("[SHELL] Error writing to file: " + e.getMessage());
+            }
+        } else {
+            // 没有输出重定向，打印到控制台
+            if (output != null && !output.isEmpty()) {
+                console.println(output);
+            }
+        }
+        
+        // 处理输入重定向（简化：暂时不支持）
+        if (inputFile != null) {
+            console.println("[SHELL] Input redirection not fully implemented yet");
+        }
+    }
+    
+    /**
+     * 执行命令并捕获输出
+     * 返回命令的输出字符串
+     */
+    private String executeCommandAndCaptureOutput(String line) {
+        String[] parts = parseCommandLine(line);
+        if (parts.length == 0) {
+            return "";
+        }
+        
+        String command = parts[0];
+        String[] args = new String[parts.length - 1];
+        System.arraycopy(parts, 1, args, 0, args.length);
+        
+        // 捕获输出的 StringBuilder
+        StringBuilder output = new StringBuilder();
+        
+        // 对于 echo 命令，返回参数
+        if (command.equals("echo")) {
+            for (int i = 0; i < args.length; i++) {
+                if (i > 0) output.append(" ");
+                output.append(args[i]);
+            }
+            return output.toString();
+        }
+        
+        // 对于其他命令，执行并返回空（简化实现）
+        // 实际应该重定向 stdout 来捕获输出
+        executeBuiltinCommand(command, args);
+        
+        return output.toString();
     }
     
     // ==================== 内置命令实现 ====================

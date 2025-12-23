@@ -18,6 +18,9 @@ public class PhysicalMemory {
     /** 页面使用位图：0 表示空闲，1 表示已使用 */
     private final byte[] pageMap;
     
+    /** 页面引用计数（用于COW） */
+    private final int[] pageRefCount;
+    
     /** 总页面数 */
     private final int totalPages;
     
@@ -31,11 +34,13 @@ public class PhysicalMemory {
         this.memory = new byte[Const.MEMORY_SIZE];
         this.totalPages = Const.NR_PAGES;
         this.pageMap = new byte[totalPages];
+        this.pageRefCount = new int[totalPages];
         
         // 初始化：低端 1MB（内核占用）标记为已使用
         int kernelPages = Const.KERNEL_MEMORY / Const.PAGE_SIZE;
         for (int i = 0; i < kernelPages; i++) {
             pageMap[i] = 1;
+            pageRefCount[i] = 1; // 内核页面引用计数为1
         }
         
         this.freePages = totalPages - kernelPages;
@@ -55,6 +60,7 @@ public class PhysicalMemory {
         for (int i = 0; i < totalPages; i++) {
             if (pageMap[i] == 0) {
                 pageMap[i] = 1;
+                pageRefCount[i] = 1; // 新分配的页面引用计数为1
                 freePages--;
                 
                 // 清零页面内容
@@ -87,8 +93,39 @@ public class PhysicalMemory {
             return;
         }
         
-        pageMap[pageNo] = 0;
-        freePages++;
+        // 减少引用计数
+        pageRefCount[pageNo]--;
+        
+        // 只有当引用计数为0时才真正释放
+        if (pageRefCount[pageNo] <= 0) {
+            pageMap[pageNo] = 0;
+            pageRefCount[pageNo] = 0;
+            freePages++;
+        }
+    }
+    
+    /**
+     * 增加页面引用计数（用于COW）
+     * 
+     * @param pageNo 页面号
+     */
+    public synchronized void incrementPageRef(int pageNo) {
+        if (pageNo >= 0 && pageNo < totalPages && pageMap[pageNo] != 0) {
+            pageRefCount[pageNo]++;
+        }
+    }
+    
+    /**
+     * 获取页面引用计数
+     * 
+     * @param pageNo 页面号
+     * @return 引用计数
+     */
+    public synchronized int getPageRefCount(int pageNo) {
+        if (pageNo >= 0 && pageNo < totalPages) {
+            return pageRefCount[pageNo];
+        }
+        return 0;
     }
     
     /**

@@ -106,6 +106,12 @@ public class Syscalls {
     /** ioctl - 设备控制 */
     public static final int SYS_IOCTL = 54;
     
+    /** dup - 复制文件描述符 */
+    public static final int SYS_DUP = 41;
+    
+    /** dup2 - 复制文件描述符到指定编号 */
+    public static final int SYS_DUP2 = 63;
+    
     
     /**
      * 系统调用名称映射（用于调试）
@@ -137,6 +143,8 @@ public class Syscalls {
             case SYS_IOCTL: return "ioctl";
             case SYS_GETPPID: return "getppid";
             case SYS_SYNC: return "sync";
+            case SYS_DUP: return "dup";
+            case SYS_DUP2: return "dup2";
             default: return "unknown(" + nr + ")";
         }
     }
