@@ -4,10 +4,12 @@ import jinux.kernel.Task;
 import jinux.kernel.Kernel;
 import jinux.include.Syscalls;
 import jinux.lib.LibC;
-import jinux.lib.LibCExample;
-import jinux.lib.SignalExample;
-import jinux.lib.PipeExample;
-import jinux.lib.ProcessExample;
+import jinux.demo.LibCExample;
+import jinux.demo.SignalExample;
+import jinux.demo.PipeExample;
+import jinux.demo.ProcessExample;
+import jinux.demo.SystemCapabilitiesDemo;
+import jinux.demo.InteractiveDemo;
 import jinux.shell.SimpleShell;
 
 /**
@@ -68,6 +70,14 @@ public class InitProcess implements Runnable {
         
         // 演示内存管理
         demonstrateMemoryManagement();
+        
+        // 综合系统能力演示
+        console.println("\n[INIT] Running comprehensive system capabilities demonstration...\n");
+        SystemCapabilitiesDemo.runAllDemos(kernel);
+        
+        // 交互式演示
+        console.println("\n[INIT] Running interactive demonstration...\n");
+        InteractiveDemo.runInteractiveDemo(kernel);
         
         // 启动 Shell
         console.println("\n[INIT] Starting Simple Shell...");

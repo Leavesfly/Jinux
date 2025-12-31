@@ -1,7 +1,8 @@
-package jinux.lib;
+package jinux.demo;
 
 import jinux.kernel.Kernel;
 import jinux.ipc.Pipe;
+import jinux.lib.LibC;
 
 /**
  * 管道机制演示

@@ -1,7 +1,8 @@
-package jinux.lib;
+package jinux.demo;
 
 import jinux.kernel.Kernel;
 import jinux.kernel.Signal;
+import jinux.lib.LibC;
 
 /**
  * 信号机制演示

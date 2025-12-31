@@ -1,6 +1,7 @@
-package jinux.lib;
+package jinux.demo;
 
 import jinux.kernel.Kernel;
+import jinux.lib.LibC;
 
 /**
  * LibC 使用示例
@@ -78,3 +79,4 @@ public class LibCExample {
         System.out.println("\n==================================\n");
     }
 }
+

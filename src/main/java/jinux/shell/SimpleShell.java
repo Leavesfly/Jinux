@@ -9,6 +9,8 @@ import jinux.kernel.Task;
 import jinux.lib.LibC;
 import jinux.mm.MemoryManager;
 import jinux.exec.ProgramLoader;
+import jinux.demo.SystemCapabilitiesDemo;
+import jinux.demo.InteractiveDemo;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -379,7 +381,7 @@ public class SimpleShell {
         console.println("  signal <pid> <signum> - Send signal to process");
         console.println("  kill <pid> <signum>   - Alias for signal");
         console.println("  demo [type]   - Run demonstrations");
-        console.println("                  Types: signal, pipe, libc, all");
+        console.println("                  Types: signal, pipe, libc, system, interactive, all");
         console.println("  run <prog>    - Run a program (demo)");
         console.println("  programs      - List available programs");
         console.println("  echo <text>   - Print text to console");
@@ -468,7 +470,7 @@ public class SimpleShell {
      * demo - 运行演示
      */
     private void cmdDemo(String[] args) {
-        String type = args.length > 0 ? args[0] : "all";
+        String type = args.length > 0 ? args[0] : "help";
         
         switch (type) {
             case "signal":
@@ -480,14 +482,31 @@ public class SimpleShell {
             case "libc":
                 runLibCDemo();
                 break;
+            case "system":
+            case "capabilities":
+                SystemCapabilitiesDemo.runAllDemos(kernel);
+                break;
+            case "interactive":
+                InteractiveDemo.runInteractiveDemo(kernel);
+                break;
             case "all":
                 runSignalDemo();
                 runPipeDemo();
                 runLibCDemo();
+                SystemCapabilitiesDemo.runAllDemos(kernel);
+                InteractiveDemo.runInteractiveDemo(kernel);
                 break;
+            case "help":
             default:
-                console.println("Unknown demo type: " + type);
-                console.println("Available types: signal, pipe, libc, all");
+                console.println("\nAvailable demo types:");
+                console.println("  signal       - Signal mechanism demonstration");
+                console.println("  pipe         - Pipe IPC demonstration");
+                console.println("  libc         - LibC library demonstration");
+                console.println("  system       - Comprehensive system capabilities demo");
+                console.println("  interactive  - Interactive demonstration");
+                console.println("  all          - Run all demonstrations");
+                console.println("\nUsage: demo [type]");
+                console.println("Example: demo system");
                 break;
         }
         console.println("");

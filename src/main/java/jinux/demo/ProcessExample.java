@@ -1,4 +1,4 @@
-package jinux.lib;
+package jinux.demo;
 
 import jinux.kernel.Kernel;
 import jinux.kernel.Task;
