@@ -117,20 +117,20 @@ public class SuperBlock {
     }
     
     /**
-     * 分配一个 inode
+     * 分配一个 inode（线程安全）
+     * 
+     * @return 分配的 inode 号，失败返回 -1
      */
-    public int allocateInode() {
+    public synchronized int allocateInode() {
         if (inodeBitmap == null) {
             return -1;
         }
         
-        // 查找第一个空闲 inode
         for (int i = 0; i < ninodes; i++) {
             int byteIdx = i / 8;
             int bitIdx = i % 8;
             
             if ((inodeBitmap[byteIdx] & (1 << bitIdx)) == 0) {
-                // 找到空闲 inode，标记为已使用
                 inodeBitmap[byteIdx] |= (1 << bitIdx);
                 dirty = true;
                 System.out.println("[FS] Allocated inode: " + i);
@@ -143,15 +143,24 @@ public class SuperBlock {
     }
     
     /**
-     * 释放一个 inode
+     * 释放一个 inode（线程安全）
+     * 
+     * @param ino 要释放的 inode 号
      */
-    public void freeInode(int ino) {
+    public synchronized void freeInode(int ino) {
         if (inodeBitmap == null || ino < 0 || ino >= ninodes) {
             return;
         }
         
         int byteIdx = ino / 8;
         int bitIdx = ino % 8;
+        
+        // 防止重复释放
+        if ((inodeBitmap[byteIdx] & (1 << bitIdx)) == 0) {
+            System.err.println("[FS] Warning: inode " + ino + " is already free");
+            return;
+        }
+        
         inodeBitmap[byteIdx] &= ~(1 << bitIdx);
         dirty = true;
         
@@ -159,21 +168,21 @@ public class SuperBlock {
     }
     
     /**
-     * 分配一个数据块
+     * 分配一个数据块（线程安全）
+     * 
+     * @return 分配的块号，失败返回 -1
      */
-    public int allocateBlock() {
+    public synchronized int allocateBlock() {
         if (zoneBitmap == null) {
             return -1;
         }
         
-        // 查找第一个空闲块
         for (int i = firstDataZone; i < nzones; i++) {
             int byteIdx = i / 8;
             int bitIdx = i % 8;
             
             if (byteIdx < zoneBitmap.length && 
                 (zoneBitmap[byteIdx] & (1 << bitIdx)) == 0) {
-                // 找到空闲块，标记为已使用
                 zoneBitmap[byteIdx] |= (1 << bitIdx);
                 dirty = true;
                 System.out.println("[FS] Allocated block: " + i);
@@ -186,9 +195,11 @@ public class SuperBlock {
     }
     
     /**
-     * 释放一个数据块
+     * 释放一个数据块（线程安全）
+     * 
+     * @param blockNo 要释放的块号
      */
-    public void freeBlock(int blockNo) {
+    public synchronized void freeBlock(int blockNo) {
         if (zoneBitmap == null || blockNo < firstDataZone || blockNo >= nzones) {
             return;
         }
@@ -196,6 +207,11 @@ public class SuperBlock {
         int byteIdx = blockNo / 8;
         int bitIdx = blockNo % 8;
         if (byteIdx < zoneBitmap.length) {
+            // 防止重复释放
+            if ((zoneBitmap[byteIdx] & (1 << bitIdx)) == 0) {
+                System.err.println("[FS] Warning: block " + blockNo + " is already free");
+                return;
+            }
             zoneBitmap[byteIdx] &= ~(1 << bitIdx);
             dirty = true;
             System.out.println("[FS] Freed block: " + blockNo);

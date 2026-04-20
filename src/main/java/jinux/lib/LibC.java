@@ -2,27 +2,175 @@ package jinux.lib;
 
 import jinux.kernel.SystemCallDispatcher;
 import jinux.kernel.Task;
+import jinux.kernel.Scheduler;
 import jinux.include.Syscalls;
 
 /**
  * 用户态 C 库封装
  * 对应 Linux 0.01 中的 lib/ 目录功能
  * 
- * 提供对系统调用的高级封装，隐藏底层 syscall 细节
+ * 提供对系统调用的高级封装，隐藏底层 syscall 细节。
+ * 字符串参数通过写入进程用户空间内存后传递虚拟地址指针给系统调用。
  * 
  * @author Jinux Project
  */
 public class LibC {
     
     private final SystemCallDispatcher syscallDispatcher;
+    private final Scheduler scheduler;
+    
+    /** 用户空间临时缓冲区的基地址（位于栈下方的保留区域） */
+    private static final long USER_BUF_BASE = 0x03F00000L; // 63MB 处
+    
+    /** 用户空间临时缓冲区大小 */
+    private static final int USER_BUF_SIZE = 0x10000; // 64KB
+    
+    /** 当前缓冲区偏移（每次系统调用前重置） */
+    private long userBufOffset;
     
     /**
      * 构造用户态库
      * 
      * @param syscallDispatcher 系统调用分发器
+     * @param scheduler 调度器（用于获取当前进程）
+     */
+    public LibC(SystemCallDispatcher syscallDispatcher, Scheduler scheduler) {
+        this.syscallDispatcher = syscallDispatcher;
+        this.scheduler = scheduler;
+        this.userBufOffset = 0;
+    }
+    
+    /**
+     * 兼容旧构造函数
      */
     public LibC(SystemCallDispatcher syscallDispatcher) {
-        this.syscallDispatcher = syscallDispatcher;
+        this(syscallDispatcher, null);
+    }
+    
+    /**
+     * 将字符串写入当前进程的用户空间内存，返回虚拟地址指针。
+     * 字符串以 null 结尾（C 风格）。
+     * 
+     * @param str 要写入的字符串
+     * @return 用户空间虚拟地址，失败返回 0
+     */
+    private long writeStringToUserSpace(String str) {
+        if (str == null || scheduler == null) {
+            return 0;
+        }
+        
+        Task currentTask = scheduler.getCurrentTask();
+        if (currentTask == null) {
+            return 0;
+        }
+        
+        try {
+            byte[] bytes = str.getBytes("UTF-8");
+            int totalLen = bytes.length + 1; // +1 for null terminator
+            
+            if (userBufOffset + totalLen > USER_BUF_SIZE) {
+                return 0; // 缓冲区空间不足
+            }
+            
+            long vaddr = USER_BUF_BASE + userBufOffset;
+            
+            // 确保内存页已映射
+            currentTask.getAddressSpace().allocateAndMap(vaddr, 7); // PRESENT|RW|USER
+            if (totalLen > 4096) {
+                // 跨页时映射下一页
+                currentTask.getAddressSpace().allocateAndMap(vaddr + 4096, 7);
+            }
+            
+            // 写入字符串内容
+            currentTask.getAddressSpace().writeBytes(vaddr, bytes, 0, bytes.length);
+            // 写入 null 终止符
+            currentTask.getAddressSpace().writeByte(vaddr + bytes.length, (byte) 0);
+            
+            userBufOffset += totalLen;
+            // 对齐到 8 字节边界
+            userBufOffset = (userBufOffset + 7) & ~7;
+            
+            return vaddr;
+        } catch (Exception e) {
+            System.err.println("[LibC] Failed to write string to user space: " + e.getMessage());
+            return 0;
+        }
+    }
+    
+    /**
+     * 将字符串数组写入用户空间内存，构建 C 风格的 char** 指针数组。
+     * 数组以 NULL 指针结尾。
+     * 
+     * @param array 字符串数组
+     * @return 用户空间指针数组的虚拟地址，失败或 array 为 null 时返回 0
+     */
+    private long writeStringArrayToUserSpace(String[] array) {
+        if (array == null || array.length == 0 || scheduler == null) {
+            return 0;
+        }
+        
+        Task currentTask = scheduler.getCurrentTask();
+        if (currentTask == null) {
+            return 0;
+        }
+        
+        try {
+            // 先写入所有字符串，收集各字符串的虚拟地址
+            long[] stringAddrs = new long[array.length];
+            for (int i = 0; i < array.length; i++) {
+                stringAddrs[i] = writeStringToUserSpace(array[i]);
+                if (stringAddrs[i] == 0) {
+                    return 0;
+                }
+            }
+            
+            // 构建指针数组（每个指针 8 字节，末尾 NULL）
+            int pointerArraySize = (array.length + 1) * 8;
+            if (userBufOffset + pointerArraySize > USER_BUF_SIZE) {
+                return 0;
+            }
+            
+            long arrayAddr = USER_BUF_BASE + userBufOffset;
+            currentTask.getAddressSpace().allocateAndMap(arrayAddr, 7);
+            if (pointerArraySize > 4096) {
+                currentTask.getAddressSpace().allocateAndMap(arrayAddr + 4096, 7);
+            }
+            
+            // 写入各字符串指针（小端序）
+            for (int i = 0; i < array.length; i++) {
+                byte[] ptrBytes = longToLittleEndianBytes(stringAddrs[i]);
+                currentTask.getAddressSpace().writeBytes(arrayAddr + i * 8, ptrBytes, 0, 8);
+            }
+            // 写入末尾 NULL 指针
+            byte[] nullPtr = new byte[8];
+            currentTask.getAddressSpace().writeBytes(arrayAddr + array.length * 8, nullPtr, 0, 8);
+            
+            userBufOffset += pointerArraySize;
+            userBufOffset = (userBufOffset + 7) & ~7;
+            
+            return arrayAddr;
+        } catch (Exception e) {
+            System.err.println("[LibC] Failed to write string array to user space: " + e.getMessage());
+            return 0;
+        }
+    }
+    
+    /**
+     * 将 long 值转换为小端序字节数组
+     */
+    private byte[] longToLittleEndianBytes(long value) {
+        byte[] bytes = new byte[8];
+        for (int i = 0; i < 8; i++) {
+            bytes[i] = (byte) (value >>> (i * 8));
+        }
+        return bytes;
+    }
+    
+    /**
+     * 重置用户空间临时缓冲区（每次系统调用前调用）
+     */
+    private void resetUserBuffer() {
+        userBufOffset = 0;
     }
     
     // ==================== 进程管理系统调用 ====================
@@ -88,10 +236,16 @@ public class LibC {
      * @return 成功不返回，失败返回 -1
      */
     public int execve(String path, String[] argv, String[] envp) {
-        // 简化：直接传递程序名的 hashCode
-        // 实际实现中需要将字符串写入用户空间并传递指针
-        return (int) syscallDispatcher.dispatch(Syscalls.SYS_EXECVE, 
-            path.hashCode(), 0, 0);
+        resetUserBuffer();
+        long pathPtr = writeStringToUserSpace(path);
+        if (pathPtr == 0) {
+            return -1;
+        }
+        
+        long argvPtr = writeStringArrayToUserSpace(argv);
+        long envpPtr = writeStringArrayToUserSpace(envp);
+        
+        return (int) syscallDispatcher.dispatch(Syscalls.SYS_EXECVE, pathPtr, argvPtr, envpPtr);
     }
     
     /**
@@ -126,9 +280,12 @@ public class LibC {
      * @return 文件描述符，失败返回 -1
      */
     public int open(String pathname, int flags, int mode) {
-        // 简化：传递路径字符串的 hashCode 作为标识
-        return (int) syscallDispatcher.dispatch(Syscalls.SYS_OPEN, 
-            pathname.hashCode(), flags, mode);
+        resetUserBuffer();
+        long pathPtr = writeStringToUserSpace(pathname);
+        if (pathPtr == 0) {
+            return -1;
+        }
+        return (int) syscallDispatcher.dispatch(Syscalls.SYS_OPEN, pathPtr, flags, mode);
     }
     
     /**
@@ -150,7 +307,27 @@ public class LibC {
      * @return 实际读取的字节数，失败返回 -1
      */
     public int read(int fd, byte[] buf, int count) {
-        return (int) syscallDispatcher.dispatch(Syscalls.SYS_READ, fd, 0, count);
+        resetUserBuffer();
+        int readCount = Math.min(count, buf != null ? buf.length : 0);
+        
+        // 分配用户空间缓冲区用于接收数据
+        long bufPtr = USER_BUF_BASE + userBufOffset;
+        Task currentTask = scheduler != null ? scheduler.getCurrentTask() : null;
+        if (currentTask != null && readCount > 0) {
+            currentTask.getAddressSpace().allocateAndMap(bufPtr, 7);
+            for (int page = 4096; page < readCount; page += 4096) {
+                currentTask.getAddressSpace().allocateAndMap(bufPtr + page, 7);
+            }
+        }
+        
+        int result = (int) syscallDispatcher.dispatch(Syscalls.SYS_READ, fd, bufPtr, readCount);
+        
+        // 将数据从用户空间拷贝回 Java 缓冲区
+        if (result > 0 && currentTask != null && buf != null) {
+            currentTask.getAddressSpace().readBytes(bufPtr, buf, 0, result);
+        }
+        
+        return result;
     }
     
     /**
@@ -162,7 +339,21 @@ public class LibC {
      * @return 实际写入的字节数，失败返回 -1
      */
     public int write(int fd, byte[] buf, int count) {
-        return (int) syscallDispatcher.dispatch(Syscalls.SYS_WRITE, fd, 0, count);
+        resetUserBuffer();
+        int writeCount = Math.min(count, buf != null ? buf.length : 0);
+        
+        // 将数据写入用户空间缓冲区
+        long bufPtr = USER_BUF_BASE + userBufOffset;
+        Task currentTask = scheduler != null ? scheduler.getCurrentTask() : null;
+        if (currentTask != null && writeCount > 0 && buf != null) {
+            currentTask.getAddressSpace().allocateAndMap(bufPtr, 7);
+            for (int page = 4096; page < writeCount; page += 4096) {
+                currentTask.getAddressSpace().allocateAndMap(bufPtr + page, 7);
+            }
+            currentTask.getAddressSpace().writeBytes(bufPtr, buf, 0, writeCount);
+        }
+        
+        return (int) syscallDispatcher.dispatch(Syscalls.SYS_WRITE, fd, bufPtr, writeCount);
     }
     
     /**
@@ -194,8 +385,12 @@ public class LibC {
      * @return 文件描述符，失败返回 -1
      */
     public int creat(String pathname, int mode) {
-        return (int) syscallDispatcher.dispatch(Syscalls.SYS_CREAT, 
-            pathname.hashCode(), mode, 0);
+        resetUserBuffer();
+        long pathPtr = writeStringToUserSpace(pathname);
+        if (pathPtr == 0) {
+            return -1;
+        }
+        return (int) syscallDispatcher.dispatch(Syscalls.SYS_CREAT, pathPtr, mode, 0);
     }
     
     /**
@@ -205,8 +400,12 @@ public class LibC {
      * @return 成功返回 0，失败返回 -1
      */
     public int unlink(String pathname) {
-        return (int) syscallDispatcher.dispatch(Syscalls.SYS_UNLINK, 
-            pathname.hashCode(), 0, 0);
+        resetUserBuffer();
+        long pathPtr = writeStringToUserSpace(pathname);
+        if (pathPtr == 0) {
+            return -1;
+        }
+        return (int) syscallDispatcher.dispatch(Syscalls.SYS_UNLINK, pathPtr, 0, 0);
     }
     
     /**
@@ -230,8 +429,12 @@ public class LibC {
      * @return 成功返回 0，失败返回 -1
      */
     public int chdir(String path) {
-        return (int) syscallDispatcher.dispatch(Syscalls.SYS_CHDIR, 
-            path.hashCode(), 0, 0);
+        resetUserBuffer();
+        long pathPtr = writeStringToUserSpace(path);
+        if (pathPtr == 0) {
+            return -1;
+        }
+        return (int) syscallDispatcher.dispatch(Syscalls.SYS_CHDIR, pathPtr, 0, 0);
     }
     
     /**
@@ -242,8 +445,12 @@ public class LibC {
      * @return 成功返回 0，失败返回 -1
      */
     public int mkdir(String pathname, int mode) {
-        return (int) syscallDispatcher.dispatch(Syscalls.SYS_MKDIR, 
-            pathname.hashCode(), mode, 0);
+        resetUserBuffer();
+        long pathPtr = writeStringToUserSpace(pathname);
+        if (pathPtr == 0) {
+            return -1;
+        }
+        return (int) syscallDispatcher.dispatch(Syscalls.SYS_MKDIR, pathPtr, mode, 0);
     }
     
     /**
@@ -253,8 +460,12 @@ public class LibC {
      * @return 成功返回 0，失败返回 -1
      */
     public int rmdir(String pathname) {
-        return (int) syscallDispatcher.dispatch(Syscalls.SYS_RMDIR, 
-            pathname.hashCode(), 0, 0);
+        resetUserBuffer();
+        long pathPtr = writeStringToUserSpace(pathname);
+        if (pathPtr == 0) {
+            return -1;
+        }
+        return (int) syscallDispatcher.dispatch(Syscalls.SYS_RMDIR, pathPtr, 0, 0);
     }
     
     // ==================== 内存管理系统调用 ====================
@@ -339,8 +550,26 @@ public class LibC {
      * @return 0 成功，-1 失败
      */
     public int pipe(int[] fds) {
-        // 简化：直接调用，实际应通过内存传递 fd 数组
-        return (int) syscallDispatcher.dispatch(Syscalls.SYS_PIPE, 0, 0, 0);
+        resetUserBuffer();
+        
+        // 分配用户空间缓冲区存放 2 个 int（8 字节）
+        long fdArrayPtr = USER_BUF_BASE + userBufOffset;
+        Task currentTask = scheduler != null ? scheduler.getCurrentTask() : null;
+        if (currentTask != null) {
+            currentTask.getAddressSpace().allocateAndMap(fdArrayPtr, 7);
+        }
+        
+        int result = (int) syscallDispatcher.dispatch(Syscalls.SYS_PIPE, fdArrayPtr, 0, 0);
+        
+        // 从用户空间读回 fd 数组
+        if (result == 0 && fds != null && fds.length >= 2 && currentTask != null) {
+            byte[] buf = new byte[8];
+            currentTask.getAddressSpace().readBytes(fdArrayPtr, buf, 0, 8);
+            fds[0] = (buf[0] & 0xFF) | ((buf[1] & 0xFF) << 8) | ((buf[2] & 0xFF) << 16) | ((buf[3] & 0xFF) << 24);
+            fds[1] = (buf[4] & 0xFF) | ((buf[5] & 0xFF) << 8) | ((buf[6] & 0xFF) << 16) | ((buf[7] & 0xFF) << 24);
+        }
+        
+        return result;
     }
     
     // ==================== 标准文件描述符常量 ====================

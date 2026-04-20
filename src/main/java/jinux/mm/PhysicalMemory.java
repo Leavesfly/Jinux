@@ -27,6 +27,12 @@ public class PhysicalMemory {
     /** 空闲页面数 */
     private int freePages;
     
+    /** 空闲页面链表头（-1 表示无空闲页）*/
+    private int freeListHead;
+    
+    /** 空闲页面链表的 next 指针数组 */
+    private final int[] freeListNext;
+    
     /**
      * 构造物理内存管理器
      */
@@ -35,12 +41,20 @@ public class PhysicalMemory {
         this.totalPages = Const.NR_PAGES;
         this.pageMap = new byte[totalPages];
         this.pageRefCount = new int[totalPages];
+        this.freeListNext = new int[totalPages];
         
         // 初始化：低端 1MB（内核占用）标记为已使用
         int kernelPages = Const.KERNEL_MEMORY / Const.PAGE_SIZE;
         for (int i = 0; i < kernelPages; i++) {
             pageMap[i] = 1;
-            pageRefCount[i] = 1; // 内核页面引用计数为1
+            pageRefCount[i] = 1;
+            freeListNext[i] = -1;
+        }
+        
+        // 构建空闲页面链表（从 kernelPages 开始）
+        this.freeListHead = kernelPages < totalPages ? kernelPages : -1;
+        for (int i = kernelPages; i < totalPages; i++) {
+            freeListNext[i] = (i + 1 < totalPages) ? i + 1 : -1;
         }
         
         this.freePages = totalPages - kernelPages;
@@ -51,30 +65,29 @@ public class PhysicalMemory {
     }
     
     /**
-     * 分配一个物理页面
+     * 分配一个物理页面（O(1) 复杂度，使用空闲链表）
      * 
      * @return 页面号，如果失败返回 -1
      */
     public synchronized int allocPage() {
-        // 简单的线性查找空闲页
-        for (int i = 0; i < totalPages; i++) {
-            if (pageMap[i] == 0) {
-                pageMap[i] = 1;
-                pageRefCount[i] = 1; // 新分配的页面引用计数为1
-                freePages--;
-                
-                // 清零页面内容
-                int offset = i * Const.PAGE_SIZE;
-                for (int j = 0; j < Const.PAGE_SIZE; j++) {
-                    memory[offset + j] = 0;
-                }
-                
-                return i;
-            }
+        if (freeListHead < 0) {
+            System.err.println("[MM] ERROR: Out of memory! No free pages.");
+            return -1;
         }
         
-        System.err.println("[MM] ERROR: Out of memory! No free pages.");
-        return -1;
+        int pageNo = freeListHead;
+        freeListHead = freeListNext[pageNo];
+        freeListNext[pageNo] = -1;
+        
+        pageMap[pageNo] = 1;
+        pageRefCount[pageNo] = 1;
+        freePages--;
+        
+        // 清零页面内容
+        int offset = pageNo * Const.PAGE_SIZE;
+        java.util.Arrays.fill(memory, offset, offset + Const.PAGE_SIZE, (byte) 0);
+        
+        return pageNo;
     }
     
     /**
@@ -93,13 +106,14 @@ public class PhysicalMemory {
             return;
         }
         
-        // 减少引用计数
         pageRefCount[pageNo]--;
         
-        // 只有当引用计数为0时才真正释放
+        // 只有当引用计数为 0 时才真正释放，归还到空闲链表
         if (pageRefCount[pageNo] <= 0) {
             pageMap[pageNo] = 0;
             pageRefCount[pageNo] = 0;
+            freeListNext[pageNo] = freeListHead;
+            freeListHead = pageNo;
             freePages++;
         }
     }

@@ -1,6 +1,10 @@
 package jinux.kernel;
 
 import jinux.include.Const;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -8,6 +12,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * 对应 Linux 0.01 中的 kernel/sched.c
  * 
  * 实现进程调度算法（时间片轮转 + 优先级）
+ * 统一使用 ReentrantLock 作为锁策略，增加 PID→Task 的 HashMap 索引
  * 
  * @author Jinux Project
  */
@@ -16,27 +21,31 @@ public class Scheduler {
     /** 进程表（task_struct 数组） */
     private final Task[] taskTable;
     
+    /** PID 到 Task 的快速索引（O(1) 查找） */
+    private final Map<Integer, Task> pidIndex;
+    
     /** 当前运行进程 */
     private Task currentTask;
     
     /** 下一个可用的 PID */
     private int nextPid;
     
-    /** 调度器锁 */
+    /** 统一的调度器锁 */
     private final ReentrantLock schedulerLock;
     
-    /** 系统时钟滴答计数 */
-    private long jiffies;
+    /** 系统时钟滴答计数（使用 AtomicLong 减少锁竞争） */
+    private final AtomicLong jiffies;
     
     /**
      * 构造调度器
      */
     public Scheduler() {
         this.taskTable = new Task[Const.NR_TASKS];
+        this.pidIndex = new HashMap<>();
         this.currentTask = null;
         this.nextPid = 0;
         this.schedulerLock = new ReentrantLock();
-        this.jiffies = 0;
+        this.jiffies = new AtomicLong(0);
     }
     
     /**
@@ -44,7 +53,7 @@ public class Scheduler {
      * 
      * @return 进程槽位索引，失败返回 -1
      */
-    private synchronized int allocateTaskSlot() {
+    private int allocateTaskSlot() {
         for (int i = 0; i < taskTable.length; i++) {
             if (taskTable[i] == null) {
                 return i;
@@ -59,16 +68,22 @@ public class Scheduler {
      * @param task 进程
      * @return 是否成功
      */
-    public synchronized boolean addTask(Task task) {
-        int slot = allocateTaskSlot();
-        if (slot < 0) {
-            System.err.println("[SCHED] ERROR: Task table full!");
-            return false;
+    public boolean addTask(Task task) {
+        schedulerLock.lock();
+        try {
+            int slot = allocateTaskSlot();
+            if (slot < 0) {
+                System.err.println("[SCHED] ERROR: Task table full!");
+                return false;
+            }
+            
+            taskTable[slot] = task;
+            pidIndex.put(task.getPid(), task);
+            System.out.println("[SCHED] Task added: " + task);
+            return true;
+        } finally {
+            schedulerLock.unlock();
         }
-        
-        taskTable[slot] = task;
-        System.out.println("[SCHED] Task added: " + task);
-        return true;
     }
     
     /**
@@ -76,23 +91,28 @@ public class Scheduler {
      * 
      * @return PID
      */
-    public synchronized int allocatePid() {
-        return nextPid++;
+    public int allocatePid() {
+        schedulerLock.lock();
+        try {
+            return nextPid++;
+        } finally {
+            schedulerLock.unlock();
+        }
     }
     
     /**
-     * 根据 PID 查找进程
+     * 根据 PID 查找进程（O(1) 复杂度）
      * 
      * @param pid 进程 ID
      * @return 进程对象，不存在返回 null
      */
-    public synchronized Task findTask(int pid) {
-        for (Task task : taskTable) {
-            if (task != null && task.getPid() == pid) {
-                return task;
-            }
+    public Task findTask(int pid) {
+        schedulerLock.lock();
+        try {
+            return pidIndex.get(pid);
+        } finally {
+            schedulerLock.unlock();
         }
-        return null;
     }
     
     /**
@@ -100,13 +120,19 @@ public class Scheduler {
      * 
      * @param pid 进程 ID
      */
-    public synchronized void removeTask(int pid) {
-        for (int i = 0; i < taskTable.length; i++) {
-            if (taskTable[i] != null && taskTable[i].getPid() == pid) {
-                System.out.println("[SCHED] Task removed: " + taskTable[i]);
-                taskTable[i] = null;
-                break;
+    public void removeTask(int pid) {
+        schedulerLock.lock();
+        try {
+            for (int i = 0; i < taskTable.length; i++) {
+                if (taskTable[i] != null && taskTable[i].getPid() == pid) {
+                    System.out.println("[SCHED] Task removed: " + taskTable[i]);
+                    taskTable[i] = null;
+                    break;
+                }
             }
+            pidIndex.remove(pid);
+        } finally {
+            schedulerLock.unlock();
         }
     }
     
@@ -122,7 +148,6 @@ public class Scheduler {
             Task next = null;
             int maxCounter = -1;
             
-            // 选择 counter 最大的可运行进程
             for (Task task : taskTable) {
                 if (task != null && task.getState() == Const.TASK_RUNNING) {
                     if (task.getCounter() > maxCounter) {
@@ -132,16 +157,15 @@ public class Scheduler {
                 }
             }
             
-            // 如果没有可运行进程，重新分配时间片
+            // 如果没有可运行进程或所有时间片用完，重新分配
             if (next == null || maxCounter == 0) {
                 for (Task task : taskTable) {
                     if (task != null && task.getState() != Const.TASK_ZOMBIE) {
-                        // 重新计算时间片：counter = counter/2 + priority
                         task.setCounter(task.getCounter() / 2 + task.getPriority());
                     }
                 }
                 
-                // 重新选择
+                maxCounter = -1;
                 for (Task task : taskTable) {
                     if (task != null && task.getState() == Const.TASK_RUNNING) {
                         if (task.getCounter() > maxCounter) {
@@ -152,7 +176,6 @@ public class Scheduler {
                 }
             }
             
-            // 切换进程
             if (next != null && next != currentTask) {
                 Task prev = currentTask;
                 currentTask = next;
@@ -172,18 +195,17 @@ public class Scheduler {
     /**
      * 时钟中断处理
      * 对应 Linux 0.01 的 do_timer()
+     * jiffies 使用 AtomicLong 无锁递增，减少高频锁竞争
      */
     public void timerInterrupt() {
-        jiffies++;
+        jiffies.incrementAndGet();
         
         schedulerLock.lock();
         try {
-            // 更新当前进程的时间统计
             if (currentTask != null) {
-                currentTask.addUtime(1); // 简化：假设都在用户态
+                currentTask.addUtime(1);
                 currentTask.decrementCounter();
                 
-                // 时间片用完，重新调度
                 if (currentTask.getCounter() <= 0) {
                     schedule();
                 }
@@ -198,15 +220,18 @@ public class Scheduler {
      * 
      * @param condition 条件（简化：用字符串表示）
      */
-    public synchronized void wakeUp(String condition) {
-        // 简化实现：唤醒所有睡眠的进程
-        // 实际 Linux 有更复杂的等待队列机制
-        for (Task task : taskTable) {
-            if (task != null && 
-                (task.getState() == Const.TASK_INTERRUPTIBLE || 
-                 task.getState() == Const.TASK_UNINTERRUPTIBLE)) {
-                task.wakeUp();
+    public void wakeUp(String condition) {
+        schedulerLock.lock();
+        try {
+            for (Task task : taskTable) {
+                if (task != null && 
+                    (task.getState() == Const.TASK_INTERRUPTIBLE || 
+                     task.getState() == Const.TASK_UNINTERRUPTIBLE)) {
+                    task.wakeUp();
+                }
             }
+        } finally {
+            schedulerLock.unlock();
         }
     }
     
@@ -220,7 +245,7 @@ public class Scheduler {
         try {
             if (currentTask != null) {
                 currentTask.sleep(interruptible);
-                schedule(); // 立即调度其他进程
+                schedule();
             }
         } finally {
             schedulerLock.unlock();
@@ -230,22 +255,27 @@ public class Scheduler {
     /**
      * 打印进程表
      */
-    public synchronized void printProcessList() {
-        System.out.println("\n========== Process List ==========");
-        System.out.println("PID\tPPID\tSTATE\t\tCOUNTER\tPRIORITY");
-        
-        for (Task task : taskTable) {
-            if (task != null) {
-                System.out.printf("%d\t%d\t%s\t%d\t%d\n",
-                    task.getPid(),
-                    task.getPpid(),
-                    task.getStateName(),
-                    task.getCounter(),
-                    task.getPriority());
+    public void printProcessList() {
+        schedulerLock.lock();
+        try {
+            System.out.println("\n========== Process List ==========");
+            System.out.println("PID\tPPID\tSTATE\t\tCOUNTER\tPRIORITY");
+            
+            for (Task task : taskTable) {
+                if (task != null) {
+                    System.out.printf("%d\t%d\t%s\t%d\t%d\n",
+                        task.getPid(),
+                        task.getPpid(),
+                        task.getStateName(),
+                        task.getCounter(),
+                        task.getPriority());
+                }
             }
+            
+            System.out.println("==================================\n");
+        } finally {
+            schedulerLock.unlock();
         }
-        
-        System.out.println("==================================\n");
     }
     
     // ==================== Getters ====================
@@ -255,7 +285,7 @@ public class Scheduler {
     }
     
     public long getJiffies() {
-        return jiffies;
+        return jiffies.get();
     }
     
     public Task[] getTaskTable() {

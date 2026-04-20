@@ -98,12 +98,18 @@ public class FileDescriptorTable {
     
     /**
      * 复制文件描述符表（用于 fork）
+     * 正确增加每个 File 的引用计数，防止父子进程共享时出现悬挂引用
      * 
      * @return 新的文件描述符表
      */
-    public FileDescriptorTable copy() {
+    public synchronized FileDescriptorTable copy() {
         FileDescriptorTable newTable = new FileDescriptorTable();
-        System.arraycopy(this.files, 0, newTable.files, 0, files.length);
+        for (int i = 0; i < files.length; i++) {
+            if (files[i] != null) {
+                files[i].incrementRef();
+                newTable.files[i] = files[i];
+            }
+        }
         return newTable;
     }
 }

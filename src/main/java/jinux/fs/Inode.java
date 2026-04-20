@@ -2,21 +2,24 @@ package jinux.fs;
 
 import jinux.include.Const;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * Inode（索引节点）
  * 对应 Linux 0.01 中的 struct inode
  * 
- * 表示文件系统中的一个文件或目录
+ * 表示文件系统中的一个文件或目录。
+ * refCount 使用 AtomicInteger 保证并发安全，dirty 使用 volatile 保证可见性。
  * 
  * @author Jinux Project
  */
 public class Inode {
     
     /** inode 编号 */
-    private int ino;
+    private final int ino;
     
     /** 设备号 */
-    private int dev;
+    private final int dev;
     
     /** 文件类型和权限 */
     private int mode;
@@ -43,7 +46,7 @@ public class Inode {
     private long ctime;
     
     /** 直接块指针（指向数据块号）*/
-    private int[] directBlocks;
+    private final int[] directBlocks;
     
     /** 一级间接块指针 */
     private int indirectBlock;
@@ -51,14 +54,14 @@ public class Inode {
     /** 二级间接块指针 */
     private int doubleIndirectBlock;
     
-    /** 引用计数（内存中的引用） */
-    private int refCount;
+    /** 引用计数（内存中的引用，使用 AtomicInteger 保证并发安全） */
+    private final AtomicInteger refCount;
     
-    /** 是否被修改（需要写回磁盘） */
-    private boolean dirty;
+    /** 是否被修改（需要写回磁盘，使用 volatile 保证可见性） */
+    private volatile boolean dirty;
     
     /** 是否已加载 */
-    private boolean loaded;
+    private volatile boolean loaded;
     
     // ==================== 文件类型常量 ====================
     
@@ -120,7 +123,7 @@ public class Inode {
         this.directBlocks = new int[10]; // Linux 0.01 使用 10 个直接块
         this.indirectBlock = 0;
         this.doubleIndirectBlock = 0;
-        this.refCount = 0;
+        this.refCount = new AtomicInteger(0);
         this.dirty = false;
         this.loaded = false;
         
@@ -159,19 +162,17 @@ public class Inode {
     }
     
     /**
-     * 增加引用计数
+     * 增加引用计数（原子操作，线程安全）
      */
     public void incrementRef() {
-        refCount++;
+        refCount.incrementAndGet();
     }
     
     /**
-     * 减少引用计数
+     * 减少引用计数（原子操作，线程安全）
      */
     public void decrementRef() {
-        if (refCount > 0) {
-            refCount--;
-        }
+        refCount.updateAndGet(current -> current > 0 ? current - 1 : 0);
     }
     
     /**
@@ -297,7 +298,7 @@ public class Inode {
     }
     
     public int getRefCount() {
-        return refCount;
+        return refCount.get();
     }
     
     public boolean isDirty() {

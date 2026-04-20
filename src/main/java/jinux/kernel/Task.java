@@ -138,8 +138,11 @@ public class Task {
             fdTable.closeAll();
         }
         
-        // 释放地址空间（除了内核需要保留的信息）
-        // 注意：实际的 Linux 会等父进程回收
+        // 释放地址空间的物理页面
+        // 注意：保留 Task 结构本身（zombie 状态），等父进程 wait() 回收
+        if (addressSpace != null) {
+            addressSpace.free();
+        }
     }
     
     /**

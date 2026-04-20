@@ -128,11 +128,12 @@ public class AddressSpace {
     
     /**
      * 写入虚拟地址的字节
+     * 使用 synchronized 保护 COW 处理，防止竞态条件
      * 
      * @param vaddr 虚拟地址
      * @param value 字节值
      */
-    public void writeByte(long vaddr, byte value) {
+    public synchronized void writeByte(long vaddr, byte value) {
         int vpage = (int) (vaddr >> Const.PAGE_SHIFT);
         
         // 检查页面权限
@@ -141,19 +142,17 @@ public class AddressSpace {
             throw new PageFaultException("Page not present at vaddr: 0x" + Long.toHexString(vaddr));
         }
         
-        // 检查是否为COW页面
+        // 检查是否为COW页面（在同一把锁内完成检查和处理，避免竞态）
         if ((flags & PageTable.PAGE_COW) != 0) {
-            // 处理写时复制
             int newPpage = handleCopyOnWrite(vpage);
             if (newPpage < 0) {
                 throw new PageFaultException("Copy-on-write failed at vaddr: 0x" + Long.toHexString(vaddr));
             }
         } else if ((flags & PageTable.PAGE_RW) == 0) {
-            // 页面是只读的
             throw new PageFaultException("Page is read-only at vaddr: 0x" + Long.toHexString(vaddr));
         }
         
-        // 重新翻译地址（可能已经改变）
+        // 重新翻译地址（COW 处理后映射可能已变更）
         long paddr = pageTable.translate(vaddr);
         if (paddr < 0) {
             throw new PageFaultException("Page not present at vaddr: 0x" + Long.toHexString(vaddr));
@@ -196,10 +195,11 @@ public class AddressSpace {
      * 
      * @return 新的地址空间副本
      */
-    public AddressSpace copy() {
+    public synchronized AddressSpace copy() {
         AddressSpace newSpace = new AddressSpace(memoryManager);
         
         // 复制页表（使用写时复制优化）
+        // synchronized 保护整个 copy 过程，防止 copy 期间页表被并发修改
         PageTable oldTable = this.pageTable;
         PageTable newTable = newSpace.pageTable;
         PhysicalMemory pm = memoryManager.getPhysicalMemory();
@@ -210,15 +210,10 @@ public class AddressSpace {
                 Integer oldFlags = oldTable.getFlags(vpage);
                 
                 if (oldPpage >= 0 && oldFlags != null) {
-                    // 增加物理页面的引用计数
                     pm.incrementPageRef(oldPpage);
                     
-                    // 将页面标记为只读和COW
-                    // 新页表和旧页表都指向同一个物理页面，但标记为只读
                     int newFlags = (oldFlags & ~PageTable.PAGE_RW) | PageTable.PAGE_COW;
                     newTable.map(vpage, oldPpage, newFlags);
-                    
-                    // 同时将旧页表的页面也标记为COW和只读
                     oldTable.setFlags(vpage, newFlags);
                 }
             }

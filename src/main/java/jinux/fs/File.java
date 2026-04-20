@@ -93,8 +93,10 @@ public class File {
             return -22; // EINVAL
         }
         
-        // 检查读权限
-        if ((mode & O_RDONLY) == 0 && (mode & O_RDWR) == 0) {
+        // 检查读权限：O_RDONLY=0 表示只读，O_WRONLY=1 表示只写
+        // 只有 O_WRONLY 模式才不允许读取
+        int accessMode = mode & 3; // 取低 2 位
+        if (accessMode == O_WRONLY) {
             return -13; // EACCES
         }
         
@@ -109,18 +111,10 @@ public class File {
             toRead = buf.length;
         }
         
-        // 从 VFS 读取文件数据（需要 VFS 引用）
-        // 注意：这里简化处理，实际应该通过 VFS 读取
-        // 由于 File 类没有 VFS 引用，我们使用 inode 的数据块直接读取
-        // 这是一个简化实现，完整实现需要 File 持有 VFS 引用
-        
-        // 简化：如果文件有数据块，尝试读取
-        int[] directBlocks = inode.getDirectBlocks();
-        if (directBlocks[0] != 0 && position < inode.getSize()) {
-            // 有数据块，但需要 VFS 来读取
-            // 这里先返回 0，表示需要外部调用 VFS.readFileData
-            // 实际使用时，应该在 SystemCallDispatcher 中调用 VFS.readFileData
-        }
+        // 注意：File 本身不持有 VFS 引用，实际的文件数据读取
+        // 由 FileSyscalls.sysRead() 通过 VFS.readFileData() 完成。
+        // 此方法仅用于管道等特殊文件的读取（通过子类重写）。
+        // 对于普通文件，FileSyscalls 会直接调用 VFS.readFileData 而非此方法。
         
         // 更新位置和访问时间
         position += toRead;
@@ -145,8 +139,9 @@ public class File {
             return -22; // EINVAL
         }
         
-        // 检查写权限
-        if ((mode & O_WRONLY) == 0 && (mode & O_RDWR) == 0) {
+        // 检查写权限：O_RDONLY=0 表示只读，不允许写入
+        int accessMode = mode & 3; // 取低 2 位
+        if (accessMode == O_RDONLY) {
             return -13; // EACCES
         }
         
@@ -157,10 +152,9 @@ public class File {
             position = inode.getSize();
         }
         
-        // 简化实现：写入到inode的数据块
-        // 实际实现需要分配数据块并写入磁盘
-        // 这里先返回写入的字节数，表示需要VFS支持
-        // TODO: 需要VFS提供writeInodeData方法
+        // 注意：File 本身不持有 VFS 引用，实际的文件数据写入
+        // 由 FileSyscalls.sysWrite() 通过 VFS.writeFileData() 完成。
+        // 此方法仅用于管道等特殊文件的写入（通过子类重写）。
         
         // 更新文件大小和位置
         long newSize = position + toWrite;

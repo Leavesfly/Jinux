@@ -105,17 +105,18 @@ public class VirtualFileSystem {
         }
         
         // 处理绝对路径和相对路径
+        Inode rootInode = getRootInode();
         Inode dir;
-        if (path.startsWith("/")) {
-            // 绝对路径：从根目录开始
-            dir = getRootInode();
+        boolean isAbsolute = path.startsWith("/");
+        
+        if (isAbsolute) {
+            dir = rootInode;
             if (dir == null) {
                 return null;
             }
-            path = path.substring(1); // 去掉开头的 '/'
+            path = path.substring(1);
         } else {
-            // 相对路径：从当前目录开始
-            dir = currentDir != null ? currentDir : getRootInode();
+            dir = currentDir != null ? currentDir : rootInode;
             if (dir == null) {
                 return null;
             }
@@ -131,15 +132,23 @@ public class VirtualFileSystem {
         String[] components = path.split("/");
         
         // 遍历路径组件
-        for (String component : components) {
+        for (int i = 0; i < components.length; i++) {
+            String component = components[i];
             if (component.isEmpty()) {
-                continue; // 跳过空组件（如 "//"）
+                continue;
+            }
+            
+            // 安全检查：防止 ".." 跳出根目录
+            if ("..".equals(component)) {
+                if (rootInode != null && dir.getIno() == rootInode.getIno()) {
+                    // 已经在根目录，".." 指向自身，跳过
+                    continue;
+                }
             }
             
             // 查找目录项
             Inode next = lookup(dir, component);
             if (next == null) {
-                // 找不到，释放当前目录引用
                 putInode(dir);
                 return null;
             }
@@ -149,9 +158,9 @@ public class VirtualFileSystem {
             dir = next;
             
             // 检查是否为目录（如果不是最后一个组件，必须是目录）
-            if (!dir.isDirectory() && !component.equals(components[components.length - 1])) {
+            if (!dir.isDirectory() && i < components.length - 1) {
                 putInode(dir);
-                return null; // 路径错误
+                return null;
             }
         }
         

@@ -15,13 +15,14 @@ import jinux.demo.InteractiveDemo;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
  * SimpleShell - Jinux 简单命令行解释器
  * 
  * 实现基本的内置命令，提供交互式命令行界面。
- * 由于缺少 execve 系统调用，暂时只支持内置命令。
+ * 支持命令历史、ANSI 彩色输出、统一错误提示。
  */
 public class SimpleShell {
     
@@ -32,11 +33,33 @@ public class SimpleShell {
     private final LibC libc;
     private boolean running;
     
+    /** 命令历史记录 */
+    private final List<String> commandHistory;
+    
+    /** 历史记录最大容量 */
+    private static final int MAX_HISTORY_SIZE = 100;
+    
     /** Shell 提示符 */
     private static final String PROMPT = "jinux$ ";
     
     /** Shell 版本 */
     private static final String VERSION = "0.0.1-alpha";
+    
+    // ==================== ANSI 颜色常量 ====================
+    
+    private static final String ANSI_RESET   = "\033[0m";
+    private static final String ANSI_RED     = "\033[31m";
+    private static final String ANSI_GREEN   = "\033[32m";
+    private static final String ANSI_YELLOW  = "\033[33m";
+    private static final String ANSI_BLUE    = "\033[34m";
+    private static final String ANSI_CYAN    = "\033[36m";
+    private static final String ANSI_BOLD    = "\033[1m";
+    
+    /** 所有内置命令名称（用于未知命令提示） */
+    private static final List<String> BUILTIN_COMMANDS = Arrays.asList(
+        "help", "ps", "mem", "time", "signal", "kill", "demo", "run",
+        "programs", "echo", "clear", "uptime", "version", "exit", "quit", "history"
+    );
     
     public SimpleShell(Kernel kernel) {
         this.kernel = kernel;
@@ -45,6 +68,7 @@ public class SimpleShell {
         this.memoryManager = kernel.getMemoryManager();
         this.libc = new LibC(kernel.getSyscallDispatcher());
         this.running = true;
+        this.commandHistory = new ArrayList<>();
     }
     
     /**
@@ -69,26 +93,99 @@ public class SimpleShell {
                 // 处理命令
                 line = line.trim();
                 if (!line.isEmpty()) {
+                    addToHistory(line);
                     executeCommand(line);
                 }
                 
             } catch (Exception e) {
-                console.println("[SHELL] Error: " + e.getMessage());
+                printError(e.getMessage());
             }
         }
         
-        console.println("\n[SHELL] Goodbye!");
+        console.println("\n" + ANSI_GREEN + "[SHELL] Goodbye!" + ANSI_RESET);
     }
     
     /**
      * 打印 Shell 欢迎信息
      */
     private void printBanner() {
-        console.println("\n========================================");
-        console.println("   Jinux Simple Shell v" + VERSION);
-        console.println("========================================");
-        console.println("Type 'help' for available commands");
-        console.println("Type 'exit' to quit\n");
+        console.println("");
+        console.println(ANSI_CYAN + ANSI_BOLD + "  ╔══════════════════════════════════════╗" + ANSI_RESET);
+        console.println(ANSI_CYAN + ANSI_BOLD + "  ║     Jinux Simple Shell v" + VERSION + "     ║" + ANSI_RESET);
+        console.println(ANSI_CYAN + ANSI_BOLD + "  ║   Java Implementation of Linux 0.01  ║" + ANSI_RESET);
+        console.println(ANSI_CYAN + ANSI_BOLD + "  ╚══════════════════════════════════════╝" + ANSI_RESET);
+        console.println(ANSI_YELLOW + "  Type 'help' for available commands" + ANSI_RESET);
+        console.println(ANSI_YELLOW + "  Type 'exit' to quit" + ANSI_RESET);
+        console.println("");
+    }
+    
+    /**
+     * 将命令添加到历史记录
+     */
+    private void addToHistory(String command) {
+        if (commandHistory.size() >= MAX_HISTORY_SIZE) {
+            commandHistory.remove(0);
+        }
+        commandHistory.add(command);
+    }
+    
+    /**
+     * 打印错误信息（统一红色格式）
+     */
+    private void printError(String message) {
+        console.println(ANSI_RED + "[ERROR] " + message + ANSI_RESET);
+    }
+    
+    /**
+     * 打印警告信息（统一黄色格式）
+     */
+    private void printWarning(String message) {
+        console.println(ANSI_YELLOW + "[WARN] " + message + ANSI_RESET);
+    }
+    
+    /**
+     * 打印成功信息（统一绿色格式）
+     */
+    private void printSuccess(String message) {
+        console.println(ANSI_GREEN + message + ANSI_RESET);
+    }
+    
+    /**
+     * 查找与输入最相似的命令（用于 "did you mean?" 提示）
+     */
+    private String findSimilarCommand(String input) {
+        int bestDistance = Integer.MAX_VALUE;
+        String bestMatch = null;
+        for (String cmd : BUILTIN_COMMANDS) {
+            int distance = levenshteinDistance(input.toLowerCase(), cmd);
+            if (distance < bestDistance && distance <= 3) {
+                bestDistance = distance;
+                bestMatch = cmd;
+            }
+        }
+        return bestMatch;
+    }
+    
+    /**
+     * 计算两个字符串的编辑距离
+     */
+    private int levenshteinDistance(String source, String target) {
+        int sourceLen = source.length();
+        int targetLen = target.length();
+        int[][] dp = new int[sourceLen + 1][targetLen + 1];
+        for (int i = 0; i <= sourceLen; i++) {
+            dp[i][0] = i;
+        }
+        for (int j = 0; j <= targetLen; j++) {
+            dp[0][j] = j;
+        }
+        for (int i = 1; i <= sourceLen; i++) {
+            for (int j = 1; j <= targetLen; j++) {
+                int cost = source.charAt(i - 1) == target.charAt(j - 1) ? 0 : 1;
+                dp[i][j] = Math.min(Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1), dp[i - 1][j - 1] + cost);
+            }
+        }
+        return dp[sourceLen][targetLen];
     }
     
     /**
@@ -187,13 +284,20 @@ public class SimpleShell {
             case "version":
                 cmdVersion(args);
                 break;
+            case "history":
+                cmdHistory(args);
+                break;
             case "exit":
             case "quit":
                 cmdExit(args);
                 break;
             default:
-                console.println(command + ": command not found");
-                console.println("Type 'help' for available commands");
+                printError(command + ": command not found");
+                String similar = findSimilarCommand(command);
+                if (similar != null) {
+                    console.println(ANSI_YELLOW + "  Did you mean: " + ANSI_BOLD + similar + ANSI_RESET + ANSI_YELLOW + " ?" + ANSI_RESET);
+                }
+                console.println("  Type " + ANSI_BOLD + "'help'" + ANSI_RESET + " for available commands");
                 break;
         }
     }
@@ -219,7 +323,7 @@ public class SimpleShell {
     private void executePipe(String line, boolean background) {
         String[] commands = line.split("\\|");
         if (commands.length < 2) {
-            console.println("Syntax error: pipe requires at least two commands");
+            printError("Syntax error: pipe requires at least two commands");
             return;
         }
         
@@ -373,43 +477,59 @@ public class SimpleShell {
      * help - 显示帮助信息
      */
     private void cmdHelp(String[] args) {
-        console.println("\nAvailable commands:");
-        console.println("  help          - Show this help message");
-        console.println("  ps            - List all processes");
-        console.println("  mem           - Show memory statistics");
-        console.println("  time          - Show current system time");
-        console.println("  signal <pid> <signum> - Send signal to process");
-        console.println("  kill <pid> <signum>   - Alias for signal");
-        console.println("  demo [type]   - Run demonstrations");
+        console.println("");
+        console.println(ANSI_BOLD + "Available commands:" + ANSI_RESET);
+        console.println(ANSI_GREEN + "  help" + ANSI_RESET + "          - Show this help message");
+        console.println(ANSI_GREEN + "  ps" + ANSI_RESET + "            - List all processes");
+        console.println(ANSI_GREEN + "  mem" + ANSI_RESET + "           - Show memory statistics");
+        console.println(ANSI_GREEN + "  time" + ANSI_RESET + "          - Show current system time");
+        console.println(ANSI_GREEN + "  signal" + ANSI_RESET + " <pid> <signum> - Send signal to process");
+        console.println(ANSI_GREEN + "  kill" + ANSI_RESET + " <pid> <signum>   - Alias for signal");
+        console.println(ANSI_GREEN + "  demo" + ANSI_RESET + " [type]   - Run demonstrations");
         console.println("                  Types: signal, pipe, libc, system, interactive, all");
-        console.println("  run <prog>    - Run a program (demo)");
-        console.println("  programs      - List available programs");
-        console.println("  echo <text>   - Print text to console");
-        console.println("  clear         - Clear screen");
-        console.println("  uptime        - Show system uptime");
-        console.println("  version       - Show Jinux version");
-        console.println("  exit          - Exit shell");
+        console.println(ANSI_GREEN + "  run" + ANSI_RESET + " <prog>    - Run a program (demo)");
+        console.println(ANSI_GREEN + "  programs" + ANSI_RESET + "      - List available programs");
+        console.println(ANSI_GREEN + "  echo" + ANSI_RESET + " <text>   - Print text to console");
+        console.println(ANSI_GREEN + "  clear" + ANSI_RESET + "         - Clear screen");
+        console.println(ANSI_GREEN + "  uptime" + ANSI_RESET + "        - Show system uptime");
+        console.println(ANSI_GREEN + "  version" + ANSI_RESET + "       - Show Jinux version");
+        console.println(ANSI_GREEN + "  history" + ANSI_RESET + "       - Show command history");
+        console.println(ANSI_GREEN + "  exit" + ANSI_RESET + "          - Exit shell");
         console.println("");
     }
     
     /**
-     * ps - 显示进程列表
+     * ps - 显示进程列表（遍历完整进程表）
      */
     private void cmdPs(String[] args) {
-        console.println("\nPID\tSTATE\t\tPRIORITY\tCOUNTER");
-        console.println("----------------------------------------------------");
+        console.println("");
+        console.println(ANSI_BOLD + "PID\tPPID\tSTATE\t\tPRIORITY\tCOUNTER" + ANSI_RESET);
+        console.println("------------------------------------------------------------");
         
-        // 获取当前任务（简化版本，只显示当前任务）
-        Task currentTask = scheduler.getCurrentTask();
-        if (currentTask != null) {
-            console.println(String.format("%d\t%-12s\t%d\t\t%d",
-                currentTask.getPid(),
-                currentTask.getState(),
-                currentTask.getPriority(),
-                currentTask.getCounter()
-            ));
-        } else {
-            console.println("No running tasks");
+        boolean found = false;
+        for (Task task : scheduler.getTaskTable()) {
+            if (task != null) {
+                found = true;
+                String stateColor = ANSI_GREEN;
+                if (task.getState() == jinux.include.Const.TASK_ZOMBIE) {
+                    stateColor = ANSI_RED;
+                } else if (task.getState() == jinux.include.Const.TASK_INTERRUPTIBLE
+                        || task.getState() == jinux.include.Const.TASK_UNINTERRUPTIBLE) {
+                    stateColor = ANSI_YELLOW;
+                }
+                console.println(String.format("%d\t%d\t%s%-12s%s\t%d\t\t%d",
+                    task.getPid(),
+                    task.getPpid(),
+                    stateColor,
+                    task.getStateName(),
+                    ANSI_RESET,
+                    task.getPriority(),
+                    task.getCounter()
+                ));
+            }
+        }
+        if (!found) {
+            printWarning("No running tasks");
         }
         console.println("");
     }
@@ -568,17 +688,33 @@ public class SimpleShell {
     }
     
     /**
-     * uptime - 显示系统运行时间
+     * uptime - 显示系统运行时间（基于调度器 jiffies）
      */
     private void cmdUptime(String[] args) {
-        long currentTime = libc.time();
-        // 简化：假设系统启动时间为 currentTime - 100
-        long uptime = 100; // 秒
+        long jiffies = scheduler.getJiffies();
+        long uptimeSeconds = jiffies / 100;
         
-        console.println("\nSystem uptime: " + uptime + " seconds");
-        console.println("  " + (uptime / 3600) + " hours, " + 
-                       ((uptime % 3600) / 60) + " minutes, " + 
-                       (uptime % 60) + " seconds");
+        console.println("");
+        console.println(ANSI_BOLD + "System uptime:" + ANSI_RESET + " " + uptimeSeconds + " seconds (" + jiffies + " jiffies)");
+        console.println("  " + (uptimeSeconds / 3600) + " hours, " + 
+                       ((uptimeSeconds % 3600) / 60) + " minutes, " + 
+                       (uptimeSeconds % 60) + " seconds");
+        console.println("");
+    }
+    
+    /**
+     * history - 显示命令历史
+     */
+    private void cmdHistory(String[] args) {
+        console.println("");
+        if (commandHistory.isEmpty()) {
+            printWarning("No command history");
+            return;
+        }
+        console.println(ANSI_BOLD + "Command history:" + ANSI_RESET);
+        for (int i = 0; i < commandHistory.size(); i++) {
+            console.println(String.format("  %s%3d%s  %s", ANSI_CYAN, i + 1, ANSI_RESET, commandHistory.get(i)));
+        }
         console.println("");
     }
     
@@ -586,10 +722,11 @@ public class SimpleShell {
      * version - 显示版本信息
      */
     private void cmdVersion(String[] args) {
-        console.println("\nJinux Operating System");
-        console.println("  Version: 0.01-alpha");
-        console.println("  Shell Version: " + VERSION);
-        console.println("  Java Implementation of Linux 0.01");
+        console.println("");
+        console.println(ANSI_BOLD + "Jinux Operating System" + ANSI_RESET);
+        console.println("  " + ANSI_CYAN + "Kernel Version:" + ANSI_RESET + " 0.01-alpha");
+        console.println("  " + ANSI_CYAN + "Shell Version:" + ANSI_RESET + "  " + VERSION);
+        console.println("  " + ANSI_CYAN + "Platform:" + ANSI_RESET + "       Java Implementation of Linux 0.01");
         console.println("");
     }
     

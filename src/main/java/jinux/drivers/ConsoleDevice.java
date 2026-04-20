@@ -23,6 +23,12 @@ public class ConsoleDevice extends CharDevice {
     /** 输入缓冲 */
     private final StringBuilder inputBuffer;
     
+    /** 输入缓冲锁（保护 inputBuffer 的并发读写） */
+    private final Object inputLock = new Object();
+    
+    /** 输出锁（保证输出顺序不交错） */
+    private final Object outputLock = new Object();
+    
     /**
      * 构造控制台设备
      */
@@ -40,65 +46,72 @@ public class ConsoleDevice extends CharDevice {
     
     @Override
     public int read(byte[] buf, int offset, int len) {
-        try {
-            // 如果缓冲区为空，读取一行
-            if (inputBuffer.length() == 0) {
-                String line = input.readLine();
-                if (line == null) {
-                    return 0; // EOF
+        synchronized (inputLock) {
+            try {
+                // 如果缓冲区为空，读取一行
+                if (inputBuffer.length() == 0) {
+                    String line = input.readLine();
+                    if (line == null) {
+                        return 0; // EOF
+                    }
+                    inputBuffer.append(line).append('\n');
                 }
-                inputBuffer.append(line).append('\n');
+                
+                // 从缓冲区复制数据
+                int count = Math.min(len, inputBuffer.length());
+                for (int i = 0; i < count; i++) {
+                    buf[offset + i] = (byte) inputBuffer.charAt(i);
+                }
+                
+                // 删除已读取的数据
+                inputBuffer.delete(0, count);
+                
+                return count;
+                
+            } catch (Exception e) {
+                System.err.println("[CONSOLE] Read error: " + e.getMessage());
+                return -1;
             }
-            
-            // 从缓冲区复制数据
-            int count = Math.min(len, inputBuffer.length());
-            for (int i = 0; i < count; i++) {
-                buf[offset + i] = (byte) inputBuffer.charAt(i);
-            }
-            
-            // 删除已读取的数据
-            inputBuffer.delete(0, count);
-            
-            return count;
-            
-        } catch (Exception e) {
-            System.err.println("[CONSOLE] Read error: " + e.getMessage());
-            return -1;
         }
     }
     
     @Override
     public int write(byte[] buf, int offset, int len) {
-        try {
-            // 将字节数组转换为字符串并输出
-            String text = new String(buf, offset, len);
-            output.print(text);
-            output.flush();
-            return len;
-            
-        } catch (Exception e) {
-            System.err.println("[CONSOLE] Write error: " + e.getMessage());
-            return -1;
+        synchronized (outputLock) {
+            try {
+                String text = new String(buf, offset, len);
+                output.print(text);
+                output.flush();
+                return len;
+                
+            } catch (Exception e) {
+                System.err.println("[CONSOLE] Write error: " + e.getMessage());
+                return -1;
+            }
         }
     }
     
     /**
-     * 写入字符串到控制台
+     * 写入字符串到控制台（线程安全）
      * 
      * @param str 字符串
      */
     public void print(String str) {
-        output.print(str);
-        output.flush();
+        synchronized (outputLock) {
+            output.print(str);
+            output.flush();
+        }
     }
     
     /**
-     * 写入字符串并换行
+     * 写入字符串并换行（线程安全）
      * 
      * @param str 字符串
      */
     public void println(String str) {
-        output.println(str);
-        output.flush();
+        synchronized (outputLock) {
+            output.println(str);
+            output.flush();
+        }
     }
 }
