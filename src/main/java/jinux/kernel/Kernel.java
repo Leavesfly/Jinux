@@ -183,33 +183,6 @@ public class Kernel {
         System.out.println("[KERNEL] Jinux halted.");
     }
     
-    /**
-     * 测试系统调用
-     */
-    public void testSystemCalls() {
-        console.println("\n[KERNEL] Testing system calls...\n");
-        
-        Task currentTask = scheduler.getCurrentTask();
-        if (currentTask == null) {
-            console.println("[KERNEL] ERROR: No current task for testing");
-            return;
-        }
-        
-        // 测试 getpid
-        long pid = syscallDispatcher.dispatch(jinux.include.Syscalls.SYS_GETPID, 0, 0, 0);
-        console.println("[TEST] getpid() = " + pid);
-        
-        // 测试 time
-        long time = syscallDispatcher.dispatch(jinux.include.Syscalls.SYS_TIME, 0, 0, 0);
-        console.println("[TEST] time() = " + time);
-        
-        // 测试 brk
-        long newBrk = syscallDispatcher.dispatch(jinux.include.Syscalls.SYS_BRK, 0x10000, 0, 0);
-        console.println("[TEST] brk(0x10000) = 0x" + Long.toHexString(newBrk));
-        
-        console.println("\n[KERNEL] System call tests complete.\n");
-    }
-    
     public IMemoryManager getMemoryManager() {
         return memoryManager;
     }

@@ -164,7 +164,7 @@ public class Inode {
                      isBlockDevice() ? "BLK" : "?";
         
         return String.format("Inode[ino=%d, type=%s, size=%d, nlink=%d, ref=%d]",
-            ino, type, size, nlink, refCount);
+            ino, type, size, nlink, refCount.get());
     }
     
     // ==================== Getters and Setters ====================
