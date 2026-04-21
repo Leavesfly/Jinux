@@ -237,7 +237,7 @@ public class Kernel {
         return clock;
     }
     
-    public VirtualFileSystem getVFS() {
+    public VirtualFileSystem getVfs() {
         return vfs;
     }
 }

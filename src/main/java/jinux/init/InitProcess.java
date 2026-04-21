@@ -34,52 +34,93 @@ public class InitProcess implements Runnable {
     
     @Override
     public void run() {
+        initializeSystem();
+        runLibCDemo();
+        runSignalDemo();
+        runPipeDemo();
+        runProcessDemo();
+        demonstrateSystemCalls();
+        demonstrateProcessManagement();
+        demonstrateMemoryManagement();
+        runSystemCapabilitiesDemo();
+        runInteractiveDemo();
+        startShell();
+    }
+    
+    /**
+     * 初始化系统，输出欢迎信息
+     */
+    private void initializeSystem() {
         var console = kernel.getConsole();
-        var syscall = kernel.getSyscallDispatcher();
-        
         console.println("\n[INIT] Init process (PID " + task.getPid() + ") started!");
         console.println("[INIT] Jinux operating system is now running.\n");
-        
-        // 演示 LibC 用户态库
+    }
+    
+    /**
+     * 演示 LibC 用户态库功能
+     */
+    private void runLibCDemo() {
+        var console = kernel.getConsole();
         console.println("[INIT] Demonstrating LibC user-space library...\n");
         LibCExample.demo(kernel);
         LibCExample.compareWithDirectCall(kernel);
-        
-        // 演示信号机制
+    }
+    
+    /**
+     * 演示信号机制
+     */
+    private void runSignalDemo() {
+        var console = kernel.getConsole();
         console.println("[INIT] Demonstrating Signal mechanism...\n");
         SignalExample.showSignalInfo(kernel);
         SignalExample.demo(kernel);
         SignalExample.demoWithLibC(kernel);
-        
-        // 演示管道机制
+    }
+    
+    /**
+     * 演示管道 IPC 机制
+     */
+    private void runPipeDemo() {
+        var console = kernel.getConsole();
         console.println("[INIT] Demonstrating Pipe mechanism...\n");
         PipeExample.showUseCases(kernel);
         PipeExample.demo(kernel);
         PipeExample.demoWithLibC(kernel);
-        
-        // 演示进程创建和程序执行
+    }
+    
+    /**
+     * 演示进程创建和程序执行
+     */
+    private void runProcessDemo() {
+        var console = kernel.getConsole();
         console.println("[INIT] Demonstrating Process Creation & Execution...\n");
         ProcessExample.demoForkExec(kernel);
         ProcessExample.demo(kernel);
-        
-        // 演示系统调用
-        demonstrateSystemCalls();
-        
-        // 演示进程管理
-        demonstrateProcessManagement();
-        
-        // 演示内存管理
-        demonstrateMemoryManagement();
-        
-        // 综合系统能力演示
+    }
+    
+    /**
+     * 演示综合系统能力
+     */
+    private void runSystemCapabilitiesDemo() {
+        var console = kernel.getConsole();
         console.println("\n[INIT] Running comprehensive system capabilities demonstration...\n");
         SystemCapabilitiesDemo.runAllDemos(kernel);
-        
-        // 交互式演示
+    }
+    
+    /**
+     * 运行交互式演示
+     */
+    private void runInteractiveDemo() {
+        var console = kernel.getConsole();
         console.println("\n[INIT] Running interactive demonstration...\n");
         InteractiveDemo.runInteractiveDemo(kernel);
-        
-        // 启动 Shell（退出后自动重启，init 进程不应退出）
+    }
+    
+    /**
+     * 启动 Shell，退出后自动重启（init 进程不应退出）
+     */
+    private void startShell() {
+        var console = kernel.getConsole();
         while (running) {
             console.println("\n[INIT] Starting Simple Shell...");
             console.println("[INIT] You can now interact with Jinux!\n");
@@ -103,8 +144,6 @@ public class InitProcess implements Runnable {
                 }
             }
         }
-        
-        console.println("[INIT] Init process exiting...");
     }
     
     /**

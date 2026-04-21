@@ -92,7 +92,7 @@ public class SystemCapabilitiesDemo {
         mm.printStats();
         
         // 文件系统信息
-        VirtualFileSystem vfs = kernel.getVFS();
+        VirtualFileSystem vfs = kernel.getVfs();
         if (vfs != null) {
             console.println("\n  File System Information:");
             console.println("    Root FS initialized:  Yes");

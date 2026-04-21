@@ -2,6 +2,7 @@ package jinux.fs;
 
 import jinux.drivers.VirtualDiskDevice;
 import jinux.include.Const;
+import jinux.include.FileSystemConstants;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -11,7 +12,7 @@ import java.util.Map;
  * 
  * @author Jinux Project
  */
-public class VirtualFileSystem {
+public class VirtualFileSystem implements PathResolver, InodeManager, BlockBufferManager, DirectoryOperations, FileDataOperations {
     
     /** 超级块表（设备号 -> SuperBlock） */
     private final Map<Integer, SuperBlock> superBlocks;
@@ -98,8 +99,23 @@ public class VirtualFileSystem {
      * @param path 路径名（如 "/home/user/file.txt" 或 "file.txt"）
      * @param currentDir 当前目录 inode（用于相对路径）
      * @return 找到的 inode，失败返回 null
+     * @deprecated 请使用 {@link #resolve(String, Inode)} 代替
      */
+    @Deprecated
     public Inode namei(String path, Inode currentDir) {
+        return resolve(path, currentDir);
+    }
+
+    /**
+     * 路径解析：将路径名转换为 inode
+     * 对应 Linux 0.01 中的 namei() 函数
+     * 
+     * @param path 路径名（如 "/home/user/file.txt" 或 "file.txt"）
+     * @param currentDir 当前目录 inode（用于相对路径）
+     * @return 找到的 inode，失败返回 null
+     */
+    @Override
+    public Inode resolve(String path, Inode currentDir) {
         if (path == null || path.isEmpty()) {
             return null;
         }
@@ -175,6 +191,7 @@ public class VirtualFileSystem {
      * @param name 文件名
      * @return 找到的 inode，失败返回 null
      */
+    @Override
     public Inode lookup(Inode dir, String name) {
         if (dir == null || name == null || !dir.isDirectory()) {
             return null;
@@ -186,8 +203,8 @@ public class VirtualFileSystem {
             return null;
         }
         
-        // 解析目录项（简化：每个目录项 16 字节：2字节 inode号 + 14字节文件名）
-        int entrySize = 16;
+        // 解析目录项（简化：每个目录项 DIR_ENTRY_SIZE 字节：2字节 inode号 + MAX_FILE_NAME_LENGTH 字节文件名）
+        int entrySize = FileSystemConstants.DIR_ENTRY_SIZE;
         int maxEntries = dirData.length / entrySize;
         
         for (int i = 0; i < maxEntries; i++) {
@@ -200,9 +217,9 @@ public class VirtualFileSystem {
                 continue; // 空目录项
             }
             
-            // 读取文件名（14字节，以0结尾）
+            // 读取文件名（MAX_FILE_NAME_LENGTH 字节，以0结尾）
             int nameLen = 0;
-            while (nameLen < 14 && dirData[offset + 2 + nameLen] != 0) {
+            while (nameLen < FileSystemConstants.MAX_FILE_NAME_LENGTH && dirData[offset + 2 + nameLen] != 0) {
                 nameLen++;
             }
             
@@ -258,6 +275,7 @@ public class VirtualFileSystem {
     /**
      * 获取或创建 inode
      */
+    @Override
     public Inode getInode(int dev, int ino) {
         // 从缓存查找
         Inode inode = inodeCache.get(ino);
@@ -277,6 +295,7 @@ public class VirtualFileSystem {
     /**
      * 释放 inode
      */
+    @Override
     public void putInode(Inode inode) {
         if (inode == null) {
             return;
@@ -296,6 +315,7 @@ public class VirtualFileSystem {
     /**
      * 获取缓冲区
      */
+    @Override
     public BufferCache getBuffer(int dev, int blockNo) {
         String key = dev + ":" + blockNo;
         BufferCache buffer = bufferCache.get(key);
@@ -316,6 +336,7 @@ public class VirtualFileSystem {
     /**
      * 释放缓冲区
      */
+    @Override
     public void releaseBuffer(BufferCache buffer) {
         if (buffer != null) {
             buffer.decrementRef();
@@ -330,6 +351,7 @@ public class VirtualFileSystem {
     /**
      * 同步所有缓冲区
      */
+    @Override
     public void sync() {
         System.out.println("[VFS] Syncing all buffers...");
         
@@ -362,8 +384,8 @@ public class VirtualFileSystem {
         String[] components = path.split("/");
         String fileName = components[components.length - 1];
         
-        if (fileName.isEmpty() || fileName.length() > 14) {
-            return null; // 文件名太长（MINIX 限制为 14 字节）
+        if (fileName.isEmpty() || fileName.length() > FileSystemConstants.MAX_FILE_NAME_LENGTH) {
+            return null; // 文件名太长（MINIX 限制为 MAX_FILE_NAME_LENGTH 字节）
         }
         
         // 检查文件是否已存在
@@ -420,7 +442,7 @@ public class VirtualFileSystem {
      * @return 是否成功
      */
     private boolean addDirectoryEntry(Inode dir, String name, int ino) {
-        if (dir == null || !dir.isDirectory() || name == null || name.length() > 14) {
+        if (dir == null || !dir.isDirectory() || name == null || name.length() > FileSystemConstants.MAX_FILE_NAME_LENGTH) {
             return false;
         }
         
@@ -431,7 +453,7 @@ public class VirtualFileSystem {
         }
         
         // 查找空闲目录项
-        int entrySize = 16;
+        int entrySize = FileSystemConstants.DIR_ENTRY_SIZE;
         int maxEntries = dirData.length / entrySize;
         int freeEntry = -1;
         
@@ -480,10 +502,10 @@ public class VirtualFileSystem {
         dirData[offset + 1] = (byte) ((ino >> 8) & 0xFF);
         
         byte[] nameBytes = name.getBytes();
-        int nameLen = Math.min(nameBytes.length, 14);
+        int nameLen = Math.min(nameBytes.length, FileSystemConstants.MAX_FILE_NAME_LENGTH);
         System.arraycopy(nameBytes, 0, dirData, offset + 2, nameLen);
         // 剩余字节填充为 0
-        for (int i = nameLen; i < 14; i++) {
+        for (int i = nameLen; i < FileSystemConstants.MAX_FILE_NAME_LENGTH; i++) {
             dirData[offset + 2 + i] = 0;
         }
         
@@ -611,8 +633,9 @@ public class VirtualFileSystem {
      * @param buf 目标缓冲区
      * @param offset 缓冲区偏移
      * @param count 要读取的字节数
-     * @return 实际读取的字节数，失败返回 -1
+     * @return 实际读取的字节数
      */
+    @Override
     public int readFileData(Inode inode, long position, byte[] buf, int offset, int count) {
         if (inode == null || buf == null || count <= 0) {
             return -1;
@@ -677,8 +700,9 @@ public class VirtualFileSystem {
      * @param buf 源缓冲区
      * @param offset 缓冲区偏移
      * @param count 要写入的字节数
-     * @return 实际写入的字节数，失败返回 -1
+     * @return 实际写入的字节数
      */
+    @Override
     public int writeFileData(Inode inode, long position, byte[] buf, int offset, int count) {
         if (inode == null || buf == null || count <= 0) {
             return -1;
@@ -757,6 +781,7 @@ public class VirtualFileSystem {
      * @param mode 目录权限
      * @return 创建的 inode，失败返回 null
      */
+    @Override
     public Inode createDirectory(String path, Inode parentDir, int mode) {
         if (path == null || parentDir == null || !parentDir.isDirectory()) {
             return null;
@@ -818,7 +843,7 @@ public class VirtualFileSystem {
         dirData[offset++] = (byte) (ino & 0xFF);
         dirData[offset++] = (byte) ((ino >> 8) & 0xFF);
         dirData[offset++] = '.';
-        for (int i = 1; i < 14; i++) {
+        for (int i = 1; i < FileSystemConstants.MAX_FILE_NAME_LENGTH; i++) {
             dirData[offset++] = 0;
         }
         
@@ -827,7 +852,7 @@ public class VirtualFileSystem {
         dirData[offset++] = (byte) ((parentDir.getIno() >> 8) & 0xFF);
         dirData[offset++] = '.';
         dirData[offset++] = '.';
-        for (int i = 2; i < 14; i++) {
+        for (int i = 2; i < FileSystemConstants.MAX_FILE_NAME_LENGTH; i++) {
             dirData[offset++] = 0;
         }
         
@@ -919,7 +944,8 @@ public class VirtualFileSystem {
      * @param name 文件名
      * @return 是否成功
      */
-    private boolean removeDirectoryEntry(Inode dir, String name) {
+    @Override
+    public boolean removeDirectoryEntry(Inode dir, String name) {
         if (dir == null || !dir.isDirectory() || name == null) {
             return false;
         }
@@ -931,7 +957,7 @@ public class VirtualFileSystem {
         }
         
         // 查找目录项
-        int entrySize = 16;
+        int entrySize = FileSystemConstants.DIR_ENTRY_SIZE;
         int maxEntries = dirData.length / entrySize;
         
         for (int i = 0; i < maxEntries; i++) {
@@ -944,7 +970,7 @@ public class VirtualFileSystem {
             
             // 读取文件名
             int nameLen = 0;
-            while (nameLen < 14 && dirData[offset + 2 + nameLen] != 0) {
+            while (nameLen < FileSystemConstants.MAX_FILE_NAME_LENGTH && dirData[offset + 2 + nameLen] != 0) {
                 nameLen++;
             }
             
@@ -1089,7 +1115,7 @@ public class VirtualFileSystem {
         // 布局：超级块(1) | inode位图 | zone位图 | inode表 | 数据区
         // inode 表从块号 2 + imapBlocks + zmapBlocks 开始
         int inodeTableStart = 2 + sb.getImapBlocks() + sb.getZmapBlocks();
-        int inodeSize = 32; // Linux 0.01 inode 大小为 32 字节
+        int inodeSize = FileSystemConstants.INODE_DISK_SIZE; // Linux 0.01 inode 大小为 INODE_DISK_SIZE 字节
         int inodesPerBlock = Const.BLOCK_SIZE / inodeSize;
         int inodeIndex = inode.getIno() - 1; // inode 编号从 1 开始
         
@@ -1163,9 +1189,9 @@ public class VirtualFileSystem {
         // nlink (1 byte)
         buf[pos++] = (byte) (inode.getNlink() & 0xFF);
         
-        // 直接块指针 (7 * 2 = 14 bytes) — MINIX v1 使用 7 个直接块
+        // 直接块指针 (MINIX_DIRECT_BLOCKS * 2 = 14 bytes) — MINIX v1 使用 MINIX_DIRECT_BLOCKS 个直接块
         int[] directBlocks = inode.getDirectBlocks();
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < FileSystemConstants.MINIX_DIRECT_BLOCKS; i++) {
             int block = (i < directBlocks.length) ? directBlocks[i] : 0;
             buf[pos++] = (byte) (block & 0xFF);
             buf[pos++] = (byte) ((block >> 8) & 0xFF);

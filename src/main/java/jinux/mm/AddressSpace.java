@@ -18,6 +18,12 @@ public class AddressSpace {
     /** 内存管理器引用 */
     private final MemoryManager memoryManager;
     
+    /** COW 处理器 */
+    private final CopyOnWriteHandler cowHandler;
+    
+    /** 内存访问器 */
+    private final MemoryAccessor memoryAccessor;
+    
     /** 代码段起始地址 */
     private long codeStart;
     
@@ -36,6 +42,12 @@ public class AddressSpace {
     /** 栈顶地址 */
     private long stackTop;
     
+    /** 用户空间栈顶地址常量 */
+    private static final long USER_STACK_TOP = Const.TASK_SIZE - Const.PAGE_SIZE;
+    
+    /** 默认页面标志：存在、可读写、用户态可访问 */
+    private static final int DEFAULT_PAGE_FLAGS = PageTable.PAGE_PRESENT | PageTable.PAGE_RW | PageTable.PAGE_USER;
+    
     /**
      * 构造地址空间
      * 
@@ -44,6 +56,8 @@ public class AddressSpace {
     public AddressSpace(MemoryManager memoryManager) {
         this.pageTable = new PageTable();
         this.memoryManager = memoryManager;
+        this.cowHandler = new CopyOnWriteHandler(memoryManager, pageTable);
+        this.memoryAccessor = new MemoryAccessor(pageTable, memoryManager.getPhysicalMemory());
         
         // 初始化为典型的用户空间布局
         // 代码段从 0x00000000 开始
@@ -56,7 +70,7 @@ public class AddressSpace {
         this.brk = 0;
         
         // 栈从高地址向下增长（64MB - 4KB）
-        this.stackTop = Const.TASK_SIZE - Const.PAGE_SIZE;
+        this.stackTop = USER_STACK_TOP;
     }
     
     /**
@@ -101,9 +115,8 @@ public class AddressSpace {
         long oldBrk = brk;
         
         // 分配新页面，失败时回滚已分配的页面
-        int allocatedFlags = PageTable.PAGE_PRESENT | PageTable.PAGE_RW | PageTable.PAGE_USER;
         for (long addr = oldBrk; addr < alignedBrk; addr += Const.PAGE_SIZE) {
-            if (!allocateAndMap(addr, allocatedFlags)) {
+            if (!allocateAndMap(addr, DEFAULT_PAGE_FLAGS)) {
                 // 回滚：释放本次已分配的所有页面
                 for (long rollbackAddr = oldBrk; rollbackAddr < addr; rollbackAddr += Const.PAGE_SIZE) {
                     int vpage = (int) (rollbackAddr >> Const.PAGE_SHIFT);
@@ -128,12 +141,7 @@ public class AddressSpace {
      * @return 字节值
      */
     public byte readByte(long vaddr) {
-        long paddr = pageTable.translate(vaddr);
-        if (paddr < 0) {
-            throw new PageFaultException("Page not present at vaddr: 0x" + Long.toHexString(vaddr));
-        }
-        
-        return memoryManager.getPhysicalMemory().readByte(paddr);
+        return memoryAccessor.readByte(vaddr);
     }
     
     /**
@@ -154,7 +162,7 @@ public class AddressSpace {
         
         // 检查是否为COW页面（在同一把锁内完成检查和处理，避免竞态）
         if ((flags & PageTable.PAGE_COW) != 0) {
-            int newPpage = handleCopyOnWrite(vpage);
+            int newPpage = cowHandler.handleCopyOnWrite(vpage);
             if (newPpage < 0) {
                 throw new PageFaultException("Copy-on-write failed at vaddr: 0x" + Long.toHexString(vaddr));
             }
@@ -162,13 +170,8 @@ public class AddressSpace {
             throw new PageFaultException("Page is read-only at vaddr: 0x" + Long.toHexString(vaddr));
         }
         
-        // 重新翻译地址（COW 处理后映射可能已变更）
-        long paddr = pageTable.translate(vaddr);
-        if (paddr < 0) {
-            throw new PageFaultException("Page not present at vaddr: 0x" + Long.toHexString(vaddr));
-        }
-        
-        memoryManager.getPhysicalMemory().writeByte(paddr, value);
+        // 委托给 MemoryAccessor 进行实际写入
+        memoryAccessor.writeByte(vaddr, value);
     }
     
     /**
@@ -181,26 +184,7 @@ public class AddressSpace {
      * @param len 读取长度
      */
     public void readBytes(long vaddr, byte[] buf, int offset, int len) {
-        int remaining = len;
-        long currentVaddr = vaddr;
-        int currentOffset = offset;
-        
-        while (remaining > 0) {
-            // 计算当前页内可读的字节数
-            int pageOffset = (int) (currentVaddr & (Const.PAGE_SIZE - 1));
-            int chunkSize = Math.min(remaining, Const.PAGE_SIZE - pageOffset);
-            
-            long paddr = pageTable.translate(currentVaddr);
-            if (paddr < 0) {
-                throw new PageFaultException("Page not present at vaddr: 0x" + Long.toHexString(currentVaddr));
-            }
-            
-            memoryManager.getPhysicalMemory().readBytes(paddr, buf, currentOffset, chunkSize);
-            
-            currentVaddr += chunkSize;
-            currentOffset += chunkSize;
-            remaining -= chunkSize;
-        }
+        memoryAccessor.readBytes(vaddr, buf, offset, len);
     }
     
     /**
@@ -228,7 +212,7 @@ public class AddressSpace {
                 throw new PageFaultException("Page not present at vaddr: 0x" + Long.toHexString(currentVaddr));
             }
             if ((pageFlags & PageTable.PAGE_COW) != 0) {
-                int newPpage = handleCopyOnWrite(vpage);
+                int newPpage = cowHandler.handleCopyOnWrite(vpage);
                 if (newPpage < 0) {
                     throw new PageFaultException("Copy-on-write failed at vaddr: 0x" + Long.toHexString(currentVaddr));
                 }
@@ -236,12 +220,8 @@ public class AddressSpace {
                 throw new PageFaultException("Page is read-only at vaddr: 0x" + Long.toHexString(currentVaddr));
             }
             
-            long paddr = pageTable.translate(currentVaddr);
-            if (paddr < 0) {
-                throw new PageFaultException("Page not present at vaddr: 0x" + Long.toHexString(currentVaddr));
-            }
-            
-            memoryManager.getPhysicalMemory().writeBytes(paddr, buf, currentOffset, chunkSize);
+            // 委托给 MemoryAccessor 进行实际写入
+            memoryAccessor.writeBytes(currentVaddr, buf, currentOffset, chunkSize);
             
             currentVaddr += chunkSize;
             currentOffset += chunkSize;
@@ -288,61 +268,6 @@ public class AddressSpace {
         newSpace.stackTop = this.stackTop;
         
         return newSpace;
-    }
-    
-    /**
-     * 处理写时复制：当写入COW页面时，复制页面
-     * 
-     * 这是 COW 机制的核心：当进程尝试写入共享页面时，
-     * 如果页面被多个进程共享（引用计数 > 1），则复制页面。
-     * 如果只有当前进程使用（引用计数 = 1），则直接修改。
-     * 
-     * @param vpage 虚拟页号
-     * @return 新的物理页号，如果失败返回-1
-     */
-    private int handleCopyOnWrite(int vpage) {
-        Integer oldFlags = pageTable.getFlags(vpage);
-        if (oldFlags == null || (oldFlags & PageTable.PAGE_COW) == 0) {
-            return -1; // 不是COW页面
-        }
-        
-        int oldPpage = pageTable.getPhysicalPage(vpage);
-        if (oldPpage < 0) {
-            return -1;
-        }
-        
-        PhysicalMemory pm = memoryManager.getPhysicalMemory();
-        
-        // 如果引用计数为1，可以直接修改，不需要复制
-        if (pm.getPageRefCount(oldPpage) == 1) {
-            // 清除COW标记，恢复写权限
-            int newFlags = (oldFlags & ~PageTable.PAGE_COW) | PageTable.PAGE_RW;
-            pageTable.setFlags(vpage, newFlags);
-            return oldPpage;
-        }
-        
-        // 需要复制页面
-        int newPpage = memoryManager.allocatePage();
-        if (newPpage < 0) {
-            return -1; // 内存不足
-        }
-        
-        // 复制页面内容
-        long srcAddr = ((long) oldPpage) << Const.PAGE_SHIFT;
-        long dstAddr = ((long) newPpage) << Const.PAGE_SHIFT;
-        
-        byte[] tempBuf = new byte[Const.PAGE_SIZE];
-        pm.readBytes(srcAddr, tempBuf, 0, Const.PAGE_SIZE);
-        pm.writeBytes(dstAddr, tempBuf, 0, Const.PAGE_SIZE);
-        
-        // 减少旧页面的引用计数
-        memoryManager.freePage(oldPpage);
-        
-        // 更新页表映射，清除COW标记，恢复写权限
-        int newFlags = (oldFlags & ~PageTable.PAGE_COW) | PageTable.PAGE_RW;
-        pageTable.map(vpage, newPpage, newFlags);
-        
-        return newPpage;
     }
     
     /**
