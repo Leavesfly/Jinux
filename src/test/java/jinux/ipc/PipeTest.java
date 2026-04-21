@@ -1,6 +1,6 @@
 package jinux.ipc;
 
-import jinux.include.Const;
+import jinux.include.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -90,7 +90,7 @@ public class PipeTest {
         byte[] writeBuf = "test".getBytes();
         int written = pipe.write(writeBuf, writeBuf.length);
         
-        assertEquals(-Const.EPIPE, written);
+        assertEquals(-ErrorCode.EPIPE, written);
     }
     
     @Test
@@ -165,11 +165,11 @@ public class PipeTest {
         
         // 无效的count
         int result = pipe.read(buf, -1);
-        assertEquals(-Const.EINVAL, result);
+        assertEquals(-ErrorCode.EINVAL, result);
         
         // null缓冲区
         result = pipe.read(null, 10);
-        assertEquals(-Const.EINVAL, result);
+        assertEquals(-ErrorCode.EINVAL, result);
     }
     
     @Test
@@ -178,11 +178,11 @@ public class PipeTest {
         
         // 无效的count
         int result = pipe.write(buf, -1);
-        assertEquals(-Const.EINVAL, result);
+        assertEquals(-ErrorCode.EINVAL, result);
         
         // null缓冲区
         result = pipe.write(null, 10);
-        assertEquals(-Const.EINVAL, result);
+        assertEquals(-ErrorCode.EINVAL, result);
     }
     
     @Test

@@ -1,6 +1,7 @@
 package jinux.kernel.syscall;
 
-import jinux.include.Const;
+import jinux.include.ErrorCode;
+import jinux.include.ProcessConstants;
 import jinux.include.Syscalls;
 import jinux.kernel.Task;
 import jinux.kernel.Scheduler;
@@ -41,12 +42,12 @@ public class SignalSyscalls {
 
         if (signum < 1 || signum >= Signal.NSIG) {
             System.err.println("[SYSCALL] signal: invalid signal number " + signum);
-            return -Const.EINVAL;
+            return -ErrorCode.EINVAL;
         }
 
         if (signum == Signal.SIGKILL || signum == Signal.SIGSTOP) {
             System.err.println("[SYSCALL] signal: cannot catch or ignore SIGKILL/SIGSTOP");
-            return -Const.EINVAL;
+            return -ErrorCode.EINVAL;
         }
 
         Task.SignalHandlerEntry[] signalHandlers = task.getSignalHandlers();
@@ -69,13 +70,13 @@ public class SignalSyscalls {
 
         if (signum < 0 || signum >= Signal.NSIG) {
             System.err.println("[SYSCALL] kill: invalid signal number " + signum);
-            return -Const.EINVAL;
+            return -ErrorCode.EINVAL;
         }
 
         Task target = scheduler.findTask((int) pid);
         if (target == null) {
             System.err.println("[SYSCALL] kill: process " + pid + " not found");
-            return -Const.ESRCH;
+            return -ErrorCode.ESRCH;
         }
 
         if (signum > 0) {
@@ -146,7 +147,7 @@ public class SignalSyscalls {
 
             case STOP:
                 System.out.println("[SIGNAL] Default action: stop pid=" + task.getPid());
-                task.setState(Const.TASK_STOPPED);
+                task.setState(ProcessConstants.TASK_STOPPED);
                 scheduler.schedule();
                 break;
 
@@ -159,8 +160,8 @@ public class SignalSyscalls {
 
             case CONTINUE:
                 System.out.println("[SIGNAL] Default action: continue pid=" + task.getPid());
-                if (task.getState() == Const.TASK_STOPPED) {
-                    task.setState(Const.TASK_RUNNING);
+                if (task.getState() == ProcessConstants.TASK_STOPPED) {
+                    task.setState(ProcessConstants.TASK_RUNNING);
                 }
                 break;
         }

@@ -6,7 +6,7 @@ import jinux.kernel.Kernel;
 import jinux.kernel.Scheduler;
 import jinux.kernel.Task;
 import jinux.lib.LibC;
-import jinux.mm.MemoryManager;
+import jinux.mm.IMemoryManager;
 import jinux.shell.commands.*;
 
 import java.io.BufferedReader;
@@ -26,7 +26,7 @@ public class SimpleShell {
     private final Kernel kernel;
     private final ConsoleDevice console;
     private final Scheduler scheduler;
-    private final MemoryManager memoryManager;
+    private final IMemoryManager memoryManager;
     private final LibC libc;
     private boolean running;
     

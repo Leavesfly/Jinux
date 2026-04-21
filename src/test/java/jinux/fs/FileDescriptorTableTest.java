@@ -1,6 +1,6 @@
 package jinux.fs;
 
-import jinux.include.Const;
+import jinux.include.FileSystemConstants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -16,7 +16,7 @@ public class FileDescriptorTableTest {
     @BeforeEach
     void setUp() {
         fdTable = new FileDescriptorTable();
-        testInode = new Inode(1, Const.ROOT_DEV);
+        testInode = new Inode(1, FileSystemConstants.ROOT_DEV);
     }
     
     @Test
@@ -53,7 +53,7 @@ public class FileDescriptorTableTest {
         
         assertSame(file, fdTable.get(fd));
         assertNull(fdTable.get(-1));
-        assertNull(fdTable.get(Const.NR_OPEN));
+        assertNull(fdTable.get(FileSystemConstants.NR_OPEN));
     }
     
     @Test
@@ -71,7 +71,7 @@ public class FileDescriptorTableTest {
     void testCloseInvalidFd() {
         // 关闭无效的文件描述符不应该崩溃
         fdTable.close(-1);
-        fdTable.close(Const.NR_OPEN);
+        fdTable.close(FileSystemConstants.NR_OPEN);
     }
     
     @Test
@@ -111,7 +111,7 @@ public class FileDescriptorTableTest {
     @Test
     void testAllocateFull() {
         // 分配所有可用的文件描述符
-        for (int i = 0; i < Const.NR_OPEN; i++) {
+        for (int i = 0; i < FileSystemConstants.NR_OPEN; i++) {
             File file = new File(testInode, File.O_RDONLY);
             int fd = fdTable.allocate(file);
             assertTrue(fd >= 0);

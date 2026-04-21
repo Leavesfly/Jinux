@@ -1,6 +1,7 @@
 package jinux.kernel.syscall;
 
-import jinux.include.Const;
+import jinux.include.FileSystemConstants;
+import jinux.include.ErrorCode;
 import jinux.include.Syscalls;
 import jinux.include.Types;
 import jinux.kernel.Task;
@@ -21,8 +22,7 @@ public class FileSyscalls {
 
     private VirtualFileSystem vfs;
 
-    /** copyStringFromUser 的最大长度限制 */
-    private static final int MAX_STRING_LENGTH = 4096;
+
 
     public FileSyscalls() {
     }
@@ -61,7 +61,7 @@ public class FileSyscalls {
         Inode currentDir = null;
         int cwdIno = task.getCurrentWorkingDir();
         if (cwdIno > 0) {
-            currentDir = vfs.getInode(Const.ROOT_DEV, cwdIno);
+            currentDir = vfs.getInode(FileSystemConstants.ROOT_DEV, cwdIno);
         }
         if (currentDir == null) {
             currentDir = vfs.getRootInode();
@@ -70,48 +70,15 @@ public class FileSyscalls {
     }
 
     private String copyStringFromUser(Task task, long userPtr, int maxLen) {
-        if (userPtr == 0 || maxLen <= 0) {
-            return null;
-        }
-        maxLen = Math.min(maxLen, MAX_STRING_LENGTH);
-        try {
-            byte[] buf = new byte[maxLen];
-            task.getAddressSpace().readBytes(userPtr, buf, 0, maxLen);
-            int len = 0;
-            while (len < maxLen && buf[len] != 0) {
-                len++;
-            }
-            return new String(buf, 0, len, "UTF-8");
-        } catch (Exception e) {
-            System.err.println("[SYSCALL] Failed to copy string from user space: " + e.getMessage());
-            return null;
-        }
+        return UserSpaceCopier.copyStringFromUser(task, userPtr, maxLen);
     }
 
     private int copyFromUser(Task task, long userPtr, byte[] buf, int offset, int len) {
-        if (userPtr == 0 || buf == null || len <= 0) {
-            return -1;
-        }
-        try {
-            task.getAddressSpace().readBytes(userPtr, buf, offset, len);
-            return len;
-        } catch (Exception e) {
-            System.err.println("[SYSCALL] Failed to copy from user space: " + e.getMessage());
-            return -1;
-        }
+        return UserSpaceCopier.copyFromUser(task, userPtr, buf, offset, len);
     }
 
     private int copyToUser(Task task, long userPtr, byte[] buf, int offset, int len) {
-        if (userPtr == 0 || buf == null || len <= 0) {
-            return -1;
-        }
-        try {
-            task.getAddressSpace().writeBytes(userPtr, buf, offset, len);
-            return len;
-        } catch (Exception e) {
-            System.err.println("[SYSCALL] Failed to copy to user space: " + e.getMessage());
-            return -1;
-        }
+        return UserSpaceCopier.copyToUser(task, userPtr, buf, offset, len);
     }
 
     // ==================== 系统调用实现 ====================
@@ -125,7 +92,7 @@ public class FileSyscalls {
         File file = task.getFdTable().get((int) fd);
         if (file == null) {
             System.err.println("[SYSCALL] read: invalid file descriptor " + fd);
-            return -Const.EBADF;
+            return -ErrorCode.EBADF;
         }
 
         if (count <= 0) {
@@ -139,7 +106,7 @@ public class FileSyscalls {
             bytesRead = vfs.readFileData(file.getInode(), file.getPosition(),
                     kernelBuf, 0, (int) count);
             if (bytesRead < 0) {
-                return -Const.EIO;
+                return -ErrorCode.EIO;
             }
             file.setPosition(file.getPosition() + bytesRead);
         } else {
@@ -153,7 +120,7 @@ public class FileSyscalls {
             int copied = copyToUser(task, bufPtr, kernelBuf, 0, bytesRead);
             if (copied < 0) {
                 System.err.println("[SYSCALL] read: failed to copy to user space");
-                return -Const.EFAULT;
+                return -ErrorCode.EFAULT;
             }
         }
 
@@ -182,7 +149,7 @@ public class FileSyscalls {
         File file = task.getFdTable().get((int) fd);
         if (file == null) {
             System.err.println("[SYSCALL] write: invalid file descriptor " + fd);
-            return -Const.EBADF;
+            return -ErrorCode.EBADF;
         }
 
         if (count <= 0) {
@@ -193,7 +160,7 @@ public class FileSyscalls {
         int copied = copyFromUser(task, bufPtr, kernelBuf, 0, (int) count);
         if (copied < 0) {
             System.err.println("[SYSCALL] write: failed to copy from user space");
-            return -Const.EFAULT;
+            return -ErrorCode.EFAULT;
         }
 
         int bytesWritten = 0;
@@ -201,7 +168,7 @@ public class FileSyscalls {
             bytesWritten = vfs.writeFileData(file.getInode(), file.getPosition(),
                     kernelBuf, 0, copied);
             if (bytesWritten < 0) {
-                return -Const.EIO;
+                return -ErrorCode.EIO;
             }
             file.setPosition(file.getPosition() + bytesWritten);
         } else {
@@ -219,13 +186,13 @@ public class FileSyscalls {
     private long sysOpen(Task task, long pathPtr, long flags, long mode) {
         if (vfs == null) {
             System.err.println("[SYSCALL] open: VFS not initialized");
-            return -Const.EINVAL;
+            return -ErrorCode.EINVAL;
         }
 
-        String path = copyStringFromUser(task, pathPtr, 256);
+        String path = copyStringFromUser(task, pathPtr, FileSystemConstants.MAX_PATH_LENGTH);
         if (path == null) {
             System.err.println("[SYSCALL] open: invalid path pointer");
-            return -Const.EFAULT;
+            return -ErrorCode.EFAULT;
         }
 
         System.out.println("[SYSCALL] open(\"" + path + "\", flags=0x" +
@@ -233,19 +200,19 @@ public class FileSyscalls {
                 ") called by pid=" + task.getPid());
 
         Inode currentDir = resolveCurrentDir(task);
-        Inode inode = vfs.namei(path, currentDir);
+        Inode inode = vfs.resolve(path, currentDir);
 
         if (inode == null && (flags & File.O_CREAT) != 0) {
             inode = vfs.createFile(path, currentDir, (int) mode);
             if (inode == null) {
                 System.err.println("[SYSCALL] open: failed to create file");
-                return -Const.ENOENT;
+                return -ErrorCode.ENOENT;
             }
         }
 
         if (inode == null) {
             System.err.println("[SYSCALL] open: file not found: " + path);
-            return -Const.ENOENT;
+            return -ErrorCode.ENOENT;
         }
 
         if ((flags & File.O_TRUNC) != 0 && inode.isRegularFile()) {
@@ -263,7 +230,7 @@ public class FileSyscalls {
         if (fd < 0) {
             vfs.putInode(inode);
             System.err.println("[SYSCALL] open: no free file descriptor");
-            return -Const.EMFILE;
+            return -ErrorCode.EMFILE;
         }
 
         System.out.println("[SYSCALL] open() returned fd=" + fd);
@@ -280,7 +247,7 @@ public class FileSyscalls {
         File file = task.getFdTable().get((int) fd);
         if (file == null) {
             System.err.println("[SYSCALL] lseek: invalid file descriptor " + fd);
-            return -Const.EBADF;
+            return -ErrorCode.EBADF;
         }
 
         long newPos = file.lseek(offset, (int) whence);
@@ -295,25 +262,25 @@ public class FileSyscalls {
 
     private long sysUnlink(Task task, long pathPtr, long arg2, long arg3) {
         if (vfs == null) {
-            return -Const.EINVAL;
+            return -ErrorCode.EINVAL;
         }
 
-        String path = copyStringFromUser(task, pathPtr, 256);
+        String path = copyStringFromUser(task, pathPtr, FileSystemConstants.MAX_PATH_LENGTH);
         if (path == null) {
-            return -Const.EFAULT;
+            return -ErrorCode.EFAULT;
         }
 
         System.out.println("[SYSCALL] unlink(\"" + path + "\") called by pid=" + task.getPid());
 
         Inode currentDir = resolveCurrentDir(task);
-        Inode inode = vfs.namei(path, currentDir);
+        Inode inode = vfs.resolve(path, currentDir);
         if (inode == null) {
-            return -Const.ENOENT;
+            return -ErrorCode.ENOENT;
         }
 
         if (inode.isDirectory()) {
             vfs.putInode(inode);
-            return -Const.EISDIR;
+            return -ErrorCode.EISDIR;
         }
 
         if (vfs.unlink(path, currentDir, inode)) {
@@ -322,31 +289,31 @@ public class FileSyscalls {
             return 0;
         } else {
             vfs.putInode(inode);
-            return -Const.EIO;
+            return -ErrorCode.EIO;
         }
     }
 
     private long sysChdir(Task task, long pathPtr, long arg2, long arg3) {
         if (vfs == null) {
-            return -Const.EINVAL;
+            return -ErrorCode.EINVAL;
         }
 
-        String path = copyStringFromUser(task, pathPtr, 256);
+        String path = copyStringFromUser(task, pathPtr, FileSystemConstants.MAX_PATH_LENGTH);
         if (path == null) {
-            return -Const.EFAULT;
+            return -ErrorCode.EFAULT;
         }
 
         System.out.println("[SYSCALL] chdir(\"" + path + "\") called by pid=" + task.getPid());
 
         Inode currentDir = resolveCurrentDir(task);
-        Inode newDir = vfs.namei(path, currentDir);
+        Inode newDir = vfs.resolve(path, currentDir);
         if (newDir == null) {
-            return -Const.ENOENT;
+            return -ErrorCode.ENOENT;
         }
 
         if (!newDir.isDirectory()) {
             vfs.putInode(newDir);
-            return -Const.ENOTDIR;
+            return -ErrorCode.ENOTDIR;
         }
 
         task.setCurrentWorkingDir(newDir.getIno());
@@ -358,12 +325,12 @@ public class FileSyscalls {
 
     private long sysMkdir(Task task, long pathPtr, long mode, long arg3) {
         if (vfs == null) {
-            return -Const.EINVAL;
+            return -ErrorCode.EINVAL;
         }
 
-        String path = copyStringFromUser(task, pathPtr, 256);
+        String path = copyStringFromUser(task, pathPtr, FileSystemConstants.MAX_PATH_LENGTH);
         if (path == null) {
-            return -Const.EFAULT;
+            return -ErrorCode.EFAULT;
         }
 
         System.out.println("[SYSCALL] mkdir(\"" + path + "\", mode=0" +
@@ -372,7 +339,7 @@ public class FileSyscalls {
         Inode currentDir = resolveCurrentDir(task);
         Inode newDir = vfs.createDirectory(path, currentDir, (int) mode);
         if (newDir == null) {
-            return -Const.EEXIST;
+            return -ErrorCode.EEXIST;
         }
 
         vfs.putInode(newDir);
@@ -382,25 +349,25 @@ public class FileSyscalls {
 
     private long sysRmdir(Task task, long pathPtr, long arg2, long arg3) {
         if (vfs == null) {
-            return -Const.EINVAL;
+            return -ErrorCode.EINVAL;
         }
 
-        String path = copyStringFromUser(task, pathPtr, 256);
+        String path = copyStringFromUser(task, pathPtr, FileSystemConstants.MAX_PATH_LENGTH);
         if (path == null) {
-            return -Const.EFAULT;
+            return -ErrorCode.EFAULT;
         }
 
         System.out.println("[SYSCALL] rmdir(\"" + path + "\") called by pid=" + task.getPid());
 
         Inode currentDir = resolveCurrentDir(task);
-        Inode dir = vfs.namei(path, currentDir);
+        Inode dir = vfs.resolve(path, currentDir);
         if (dir == null) {
-            return -Const.ENOENT;
+            return -ErrorCode.ENOENT;
         }
 
         if (!dir.isDirectory()) {
             vfs.putInode(dir);
-            return -Const.ENOTDIR;
+            return -ErrorCode.ENOTDIR;
         }
 
         if (vfs.unlink(path, currentDir, dir)) {
@@ -409,26 +376,26 @@ public class FileSyscalls {
             return 0;
         } else {
             vfs.putInode(dir);
-            return -Const.EIO;
+            return -ErrorCode.EIO;
         }
     }
 
     private long sysStat(Task task, long pathPtr, long statPtr, long arg3) {
         if (vfs == null) {
-            return -Const.EINVAL;
+            return -ErrorCode.EINVAL;
         }
 
-        String path = copyStringFromUser(task, pathPtr, 256);
+        String path = copyStringFromUser(task, pathPtr, FileSystemConstants.MAX_PATH_LENGTH);
         if (path == null) {
-            return -Const.EFAULT;
+            return -ErrorCode.EFAULT;
         }
 
         System.out.println("[SYSCALL] stat(\"" + path + "\") called by pid=" + task.getPid());
 
         Inode currentDir = resolveCurrentDir(task);
-        Inode inode = vfs.namei(path, currentDir);
+        Inode inode = vfs.resolve(path, currentDir);
         if (inode == null) {
-            return -Const.ENOENT;
+            return -ErrorCode.ENOENT;
         }
 
         Types.Stat stat = fillStat(inode);
@@ -436,7 +403,7 @@ public class FileSyscalls {
         int copied = copyToUser(task, statPtr, statBytes, 0, statBytes.length);
         if (copied < 0) {
             vfs.putInode(inode);
-            return -Const.EFAULT;
+            return -ErrorCode.EFAULT;
         }
 
         vfs.putInode(inode);
@@ -448,12 +415,12 @@ public class FileSyscalls {
         File file = task.getFdTable().get((int) fd);
         if (file == null) {
             System.err.println("[SYSCALL] fstat: invalid file descriptor " + fd);
-            return -Const.EBADF;
+            return -ErrorCode.EBADF;
         }
 
         Inode inode = file.getInode();
         if (inode == null) {
-            return -Const.EBADF;
+            return -ErrorCode.EBADF;
         }
 
         System.out.println("[SYSCALL] fstat(fd=" + fd + ") called by pid=" + task.getPid());
@@ -462,7 +429,7 @@ public class FileSyscalls {
         byte[] statBytes = stat.toBytes();
         int copied = copyToUser(task, statPtr, statBytes, 0, statBytes.length);
         if (copied < 0) {
-            return -Const.EFAULT;
+            return -ErrorCode.EFAULT;
         }
 
         System.out.println("[SYSCALL] fstat() succeeded");
@@ -473,13 +440,13 @@ public class FileSyscalls {
         File oldFile = task.getFdTable().get((int) oldfd);
         if (oldFile == null) {
             System.err.println("[SYSCALL] dup: invalid file descriptor " + oldfd);
-            return -Const.EBADF;
+            return -ErrorCode.EBADF;
         }
 
         int newfd = task.getFdTable().allocate(oldFile);
         if (newfd < 0) {
             System.err.println("[SYSCALL] dup: no free file descriptor");
-            return -Const.EMFILE;
+            return -ErrorCode.EMFILE;
         }
 
         oldFile.incrementRef();
@@ -491,7 +458,7 @@ public class FileSyscalls {
         File oldFile = task.getFdTable().get((int) oldfd);
         if (oldFile == null) {
             System.err.println("[SYSCALL] dup2: invalid file descriptor " + oldfd);
-            return -Const.EBADF;
+            return -ErrorCode.EBADF;
         }
 
         File existingFile = task.getFdTable().get((int) newfd);
@@ -501,7 +468,7 @@ public class FileSyscalls {
 
         if (!task.getFdTable().set((int) newfd, oldFile)) {
             System.err.println("[SYSCALL] dup2: failed to set file descriptor " + newfd);
-            return -Const.EBADF;
+            return -ErrorCode.EBADF;
         }
 
         oldFile.incrementRef();

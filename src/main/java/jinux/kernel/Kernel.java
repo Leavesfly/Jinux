@@ -1,10 +1,12 @@
 package jinux.kernel;
 
 import jinux.mm.MemoryManager;
-import jinux.mm.AddressSpace;
+import jinux.mm.IMemoryManager;
+import jinux.mm.IAddressSpace;
 import jinux.drivers.*;
 import jinux.fs.VirtualFileSystem;
-import jinux.include.Const;
+import jinux.include.MemoryConstants;
+import jinux.include.ProcessConstants;
 
 /**
  * Jinux 内核主类
@@ -17,7 +19,7 @@ import jinux.include.Const;
 public class Kernel {
     
     /** 内存管理器 */
-    private final MemoryManager memoryManager;
+    private final IMemoryManager memoryManager;
     
     /** 进程调度器 */
     private final Scheduler scheduler;
@@ -105,16 +107,13 @@ public class Kernel {
         int pid = scheduler.allocatePid();
         
         // 创建地址空间
-        AddressSpace addressSpace = memoryManager.createAddressSpace();
+        IAddressSpace addressSpace = memoryManager.createAddressSpace();
         
         // 分配一些初始内存（代码段、数据段、栈）
         // 简化：分配几个页面用于基本运行
-        for (int i = 0; i < 4; i++) {
-            long vaddr = i * Const.PAGE_SIZE;
-            addressSpace.allocateAndMap(vaddr, 
-                jinux.mm.PageTable.PAGE_PRESENT | 
-                jinux.mm.PageTable.PAGE_RW | 
-                jinux.mm.PageTable.PAGE_USER);
+        for (int i = 0; i < ProcessConstants.INIT_PROCESS_PAGES; i++) {
+            long vaddr = i * MemoryConstants.PAGE_SIZE;
+            addressSpace.allocateAndMap(vaddr, MemoryConstants.DEFAULT_PAGE_FLAGS);
         }
         
         // 创建进程
@@ -211,9 +210,7 @@ public class Kernel {
         console.println("\n[KERNEL] System call tests complete.\n");
     }
     
-    // ==================== Getters ====================
-    
-    public MemoryManager getMemoryManager() {
+    public IMemoryManager getMemoryManager() {
         return memoryManager;
     }
     

@@ -59,6 +59,24 @@ public class MemoryConstants {
      */
     public static final int TASK_SIZE = 64 * 1024 * 1024;
 
+    /**
+     * 用户空间缓冲区基地址（63MB 处）
+     * <p>
+     * 用于 LibC 层在用户空间分配临时缓冲区，传递系统调用参数。
+     * </p>
+     */
+    public static final long USER_BUF_BASE = 0x03F00000L;
+
+    /**
+     * 用户空间缓冲区大小（1MB）
+     */
+    public static final int USER_BUF_SIZE = 1024 * 1024;
+
+    /**
+     * 默认页面标志：存在 + 可读写 + 用户态可访问
+     */
+    public static final int DEFAULT_PAGE_FLAGS = 7;
+
     // ==================== 辅助方法 ====================
 
     /**

@@ -1,7 +1,5 @@
 package jinux.mm;
 
-import jinux.include.Const;
-
 /**
  * 内存管理器
  * 对应 Linux 0.01 中的 mm/memory.c
@@ -10,7 +8,7 @@ import jinux.include.Const;
  * 
  * @author Jinux Project
  */
-public class MemoryManager {
+public class MemoryManager implements IMemoryManager {
     
     /** 物理内存管理器 */
     private final PhysicalMemory physicalMemory;
@@ -45,14 +43,16 @@ public class MemoryManager {
      * 
      * @return 新的地址空间
      */
-    public AddressSpace createAddressSpace() {
+    @Override
+    public IAddressSpace createAddressSpace() {
         return new AddressSpace(this);
     }
     
     /**
      * 获取物理内存管理器
      */
-    public PhysicalMemory getPhysicalMemory() {
+    @Override
+    public IPhysicalMemory getPhysicalMemory() {
         return physicalMemory;
     }
     

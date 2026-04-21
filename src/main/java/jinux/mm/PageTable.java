@@ -1,6 +1,6 @@
 package jinux.mm;
 
-import jinux.include.Const;
+import jinux.include.MemoryConstants;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -13,7 +13,7 @@ import java.util.Map;
  * 
  * @author Jinux Project
  */
-public class PageTable {
+public class PageTable implements IPageTable {
     
     /** 虚拟页号 -> 物理页号的映射 */
     private final Map<Integer, Integer> mappings;
@@ -85,15 +85,15 @@ public class PageTable {
      * @return 物理地址，如果未映射返回 -1
      */
     public synchronized long translate(long vaddr) {
-        int vpage = (int) (vaddr >> Const.PAGE_SHIFT);
-        int offset = (int) (vaddr & (Const.PAGE_SIZE - 1));
+        int vpage = (int) (vaddr >> MemoryConstants.PAGE_SHIFT);
+        int offset = (int) (vaddr & (MemoryConstants.PAGE_SIZE - 1));
         
         int ppage = getPhysicalPage(vpage);
         if (ppage < 0) {
             return -1; // 页面未映射
         }
         
-        return (((long) ppage) << Const.PAGE_SHIFT) | offset;
+        return (((long) ppage) << MemoryConstants.PAGE_SHIFT) | offset;
     }
     
     /**
@@ -116,7 +116,8 @@ public class PageTable {
      * 
      * @return 新的页表副本
      */
-    public synchronized PageTable copy() {
+    @Override
+    public synchronized IPageTable copy() {
         PageTable newTable = new PageTable();
         newTable.mappings.putAll(this.mappings);
         newTable.flags.putAll(this.flags);

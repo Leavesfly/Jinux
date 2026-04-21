@@ -1,6 +1,6 @@
 package jinux.mm;
 
-import jinux.include.Const;
+import jinux.include.MemoryConstants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -58,10 +58,10 @@ public class PageTableTest {
         
         pageTable.map(vpage, ppage, flags);
         
-        long vaddr = ((long) vpage << Const.PAGE_SHIFT) | offset;
+        long vaddr = ((long) vpage << MemoryConstants.PAGE_SHIFT) | offset;
         long paddr = pageTable.translate(vaddr);
         
-        long expectedPaddr = ((long) ppage << Const.PAGE_SHIFT) | offset;
+        long expectedPaddr = ((long) ppage << MemoryConstants.PAGE_SHIFT) | offset;
         assertEquals(expectedPaddr, paddr);
     }
     

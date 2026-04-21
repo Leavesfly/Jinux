@@ -1,6 +1,6 @@
 package jinux.kernel.syscall;
 
-import jinux.include.Const;
+import jinux.include.ErrorCode;
 import jinux.include.Syscalls;
 import jinux.include.Types;
 import jinux.kernel.Task;
@@ -63,7 +63,7 @@ public class MiscSyscalls {
             byte[] tmsBytes = tms.toBytes();
             int copied = copyToUser(task, tmsPtr, tmsBytes, 0, tmsBytes.length);
             if (copied < 0) {
-                return -Const.EFAULT;
+                return -ErrorCode.EFAULT;
             }
         }
 
@@ -78,15 +78,6 @@ public class MiscSyscalls {
     // ==================== 辅助方法 ====================
 
     private int copyToUser(Task task, long userPtr, byte[] buf, int offset, int len) {
-        if (userPtr == 0 || buf == null || len <= 0) {
-            return -1;
-        }
-        try {
-            task.getAddressSpace().writeBytes(userPtr, buf, offset, len);
-            return len;
-        } catch (Exception e) {
-            System.err.println("[SYSCALL] Failed to copy to user space: " + e.getMessage());
-            return -1;
-        }
+        return UserSpaceCopier.copyToUser(task, userPtr, buf, offset, len);
     }
 }

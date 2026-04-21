@@ -1,6 +1,6 @@
 package jinux.drivers;
 
-import jinux.include.Const;
+import jinux.include.ProcessConstants;
 import jinux.kernel.Scheduler;
 
 import java.util.Timer;
@@ -39,7 +39,7 @@ public class ClockDevice extends Device {
     @Override
     public void init() {
         System.out.println("[CLOCK] Clock device initialized: " + this);
-        System.out.println("[CLOCK] Timer frequency: " + Const.HZ + " HZ (" + Const.TICK_MS + "ms per tick)");
+        System.out.println("[CLOCK] Timer frequency: " + ProcessConstants.HZ + " HZ (" + ProcessConstants.TICK_MS + "ms per tick)");
     }
     
     /**
@@ -59,7 +59,7 @@ public class ClockDevice extends Device {
             public void run() {
                 timerInterrupt();
             }
-        }, Const.TICK_MS, Const.TICK_MS);
+        }, ProcessConstants.TICK_MS, ProcessConstants.TICK_MS);
         
         System.out.println("[CLOCK] Timer started");
     }

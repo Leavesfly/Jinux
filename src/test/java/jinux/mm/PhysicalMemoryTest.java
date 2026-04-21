@@ -1,6 +1,6 @@
 package jinux.mm;
 
-import jinux.include.Const;
+import jinux.include.MemoryConstants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -53,7 +53,7 @@ public class PhysicalMemoryTest {
     @Test
     void testReadWriteByte() {
         int pageNo = physicalMemory.allocPage();
-        long paddr = ((long) pageNo) << Const.PAGE_SHIFT;
+        long paddr = ((long) pageNo) << MemoryConstants.PAGE_SHIFT;
         
         byte testValue = (byte) 0xAB;
         physicalMemory.writeByte(paddr, testValue);
@@ -65,7 +65,7 @@ public class PhysicalMemoryTest {
     @Test
     void testReadWriteBytes() {
         int pageNo = physicalMemory.allocPage();
-        long paddr = ((long) pageNo) << Const.PAGE_SHIFT;
+        long paddr = ((long) pageNo) << MemoryConstants.PAGE_SHIFT;
         
         byte[] writeBuf = {0x01, 0x02, 0x03, 0x04, 0x05};
         physicalMemory.writeBytes(paddr, writeBuf, 0, writeBuf.length);
@@ -78,7 +78,7 @@ public class PhysicalMemoryTest {
     
     @Test
     void testReadWriteByteOutOfBounds() {
-        long invalidAddr = Const.MEMORY_SIZE + 100;
+        long invalidAddr = MemoryConstants.MEMORY_SIZE + 100;
         
         assertThrows(IndexOutOfBoundsException.class, () -> {
             physicalMemory.readByte(invalidAddr);
@@ -92,7 +92,7 @@ public class PhysicalMemoryTest {
     @Test
     void testPageAllocationClearsMemory() {
         int pageNo = physicalMemory.allocPage();
-        long paddr = ((long) pageNo) << Const.PAGE_SHIFT;
+        long paddr = ((long) pageNo) << MemoryConstants.PAGE_SHIFT;
         
         // 写入一些数据
         physicalMemory.writeByte(paddr, (byte) 0xFF);
@@ -100,7 +100,7 @@ public class PhysicalMemoryTest {
         // 释放并重新分配
         physicalMemory.freePage(pageNo);
         int newPageNo = physicalMemory.allocPage();
-        long newPaddr = ((long) newPageNo) << Const.PAGE_SHIFT;
+        long newPaddr = ((long) newPageNo) << MemoryConstants.PAGE_SHIFT;
         
         // 新分配的页面应该是清零的
         // 注意：如果分配算法重用页面，这里可能失败

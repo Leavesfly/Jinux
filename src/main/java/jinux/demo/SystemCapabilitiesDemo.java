@@ -4,8 +4,8 @@ import jinux.kernel.Kernel;
 import jinux.kernel.Task;
 import jinux.kernel.Scheduler;
 import jinux.kernel.Signal;
-import jinux.mm.MemoryManager;
-import jinux.mm.AddressSpace;
+import jinux.mm.IMemoryManager;
+import jinux.mm.IAddressSpace;
 import jinux.ipc.Pipe;
 import jinux.fs.File;
 import jinux.fs.VirtualFileSystem;
@@ -87,7 +87,7 @@ public class SystemCapabilitiesDemo {
         console.println("    Human Readable:       " + new java.util.Date(time * 1000));
         
         // 内存信息
-        MemoryManager mm = kernel.getMemoryManager();
+        IMemoryManager mm = kernel.getMemoryManager();
         console.println("\n  Memory Information:");
         mm.printStats();
         
@@ -159,7 +159,7 @@ public class SystemCapabilitiesDemo {
         console.println("═══════════════════════════════════════════════════════════\n");
         
         if (currentTask != null) {
-            AddressSpace addrSpace = currentTask.getAddressSpace();
+            IAddressSpace addrSpace = currentTask.getAddressSpace();
             
             console.println("  Address Space Layout:");
             console.println("    Code Segment:   0x" + Long.toHexString(addrSpace.getCodeStart()) + 

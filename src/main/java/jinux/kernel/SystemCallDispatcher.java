@@ -1,8 +1,8 @@
 package jinux.kernel;
 
-import jinux.include.Const;
+import jinux.include.ErrorCode;
 import jinux.include.Syscalls;
-import jinux.mm.MemoryManager;
+import jinux.mm.IMemoryManager;
 import jinux.fs.VirtualFileSystem;
 import jinux.kernel.syscall.*;
 
@@ -48,7 +48,7 @@ public class SystemCallDispatcher {
     /**
      * 构造系统调用分发器
      */
-    public SystemCallDispatcher(Scheduler scheduler, MemoryManager memoryManager) {
+    public SystemCallDispatcher(Scheduler scheduler, IMemoryManager memoryManager) {
         this.scheduler = scheduler;
         this.handlers = new HashMap<>();
         
@@ -95,14 +95,14 @@ public class SystemCallDispatcher {
         
         if (currentTask == null) {
             System.err.println("[SYSCALL] ERROR: No current task!");
-            return -Const.ESRCH;
+            return -ErrorCode.ESRCH;
         }
         
         SystemCallHandler handler = handlers.get(nr);
         if (handler == null) {
             System.err.println("[SYSCALL] ERROR: Unknown syscall: " + nr + " (" + 
                 Syscalls.getSyscallName(nr) + ")");
-            return -Const.EINVAL;
+            return -ErrorCode.EINVAL;
         }
         
         // 记录进入内核态
@@ -121,7 +121,7 @@ public class SystemCallDispatcher {
             System.err.println("[SYSCALL] Exception in syscall " + Syscalls.getSyscallName(nr) + 
                 ": " + e.getMessage());
             e.printStackTrace();
-            return -Const.EFAULT;
+            return -ErrorCode.EFAULT;
         }
     }
     

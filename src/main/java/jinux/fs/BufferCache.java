@@ -1,6 +1,6 @@
 package jinux.fs;
 
-import jinux.include.Const;
+import jinux.include.FileSystemConstants;
 
 /**
  * 缓冲区缓存
@@ -39,7 +39,7 @@ public class BufferCache {
     public BufferCache(int dev, int blockNo) {
         this.dev = dev;
         this.blockNo = blockNo;
-        this.data = new byte[Const.BLOCK_SIZE];
+        this.data = new byte[FileSystemConstants.BLOCK_SIZE];
         this.valid = false;
         this.dirty = false;
         this.refCount = 0;
@@ -111,7 +111,7 @@ public class BufferCache {
     }
     
     public void setData(byte[] data) {
-        if (data.length == Const.BLOCK_SIZE) {
+        if (data.length == FileSystemConstants.BLOCK_SIZE) {
             this.data = data;
             this.valid = true;
             this.dirty = true;

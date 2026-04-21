@@ -140,6 +140,21 @@ public class FileSystemConstants {
      */
     public static final int S_IXUSR = 0000100;
 
+    /**
+     * 根目录 inode 号
+     */
+    public static final int ROOT_INODE = 1;
+
+    /**
+     * 文件描述符表最大容量
+     */
+    public static final int FD_TABLE_SIZE = 64;
+
+    /**
+     * 路径名最大长度
+     */
+    public static final int MAX_PATH_LENGTH = 256;
+
     // ==================== 文件打开标志 ====================
 
     /**

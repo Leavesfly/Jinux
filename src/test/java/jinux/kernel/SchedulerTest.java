@@ -1,6 +1,6 @@
 package jinux.kernel;
 
-import jinux.include.Const;
+import jinux.include.ProcessConstants;
 import jinux.mm.AddressSpace;
 import jinux.mm.MemoryManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -156,7 +156,7 @@ public class SchedulerTest {
         // 当前任务睡眠
         scheduler.sleep(true);
         
-        assertEquals(Const.TASK_INTERRUPTIBLE, task.getState());
+        assertEquals(ProcessConstants.TASK_INTERRUPTIBLE, task.getState());
     }
     
     @Test
@@ -175,14 +175,14 @@ public class SchedulerTest {
         
         scheduler.wakeUp("test");
         
-        assertEquals(Const.TASK_RUNNING, task1.getState());
-        assertEquals(Const.TASK_RUNNING, task2.getState());
+        assertEquals(ProcessConstants.TASK_RUNNING, task1.getState());
+        assertEquals(ProcessConstants.TASK_RUNNING, task2.getState());
     }
     
     @Test
     void testTaskTableFull() {
         // 尝试添加超过最大数量的任务
-        for (int i = 0; i < Const.NR_TASKS; i++) {
+        for (int i = 0; i < ProcessConstants.NR_TASKS; i++) {
             AddressSpace addressSpace = memoryManager.createAddressSpace();
             Task task = new Task(scheduler.allocatePid(), 0, addressSpace);
             assertTrue(scheduler.addTask(task));

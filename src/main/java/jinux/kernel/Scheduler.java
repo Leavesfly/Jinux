@@ -1,6 +1,6 @@
 package jinux.kernel;
 
-import jinux.include.Const;
+import jinux.include.ProcessConstants;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -13,6 +13,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * 
  * 实现进程调度算法（时间片轮转 + 优先级）
  * 统一使用 ReentrantLock 作为锁策略，增加 PID→Task 的 HashMap 索引
+ * 调度算法通过 {@link SchedulingAlgorithm} 策略接口解耦，支持替换。
  * 
  * @author Jinux Project
  */
@@ -36,16 +37,29 @@ public class Scheduler {
     /** 系统时钟滴答计数（使用 AtomicLong 减少锁竞争） */
     private final AtomicLong jiffies;
     
+    /** 调度算法策略 */
+    private final SchedulingAlgorithm schedulingAlgorithm;
+    
     /**
-     * 构造调度器
+     * 使用默认调度算法（Linux 0.01 原始算法）构造调度器
      */
     public Scheduler() {
-        this.taskTable = new Task[Const.NR_TASKS];
+        this(new LinuxSchedulingAlgorithm());
+    }
+    
+    /**
+     * 使用指定调度算法构造调度器
+     *
+     * @param schedulingAlgorithm 调度算法策略
+     */
+    public Scheduler(SchedulingAlgorithm schedulingAlgorithm) {
+        this.taskTable = new Task[ProcessConstants.NR_TASKS];
         this.pidIndex = new HashMap<>();
         this.currentTask = null;
         this.nextPid = 0;
         this.schedulerLock = new ReentrantLock();
         this.jiffies = new AtomicLong(0);
+        this.schedulingAlgorithm = schedulingAlgorithm;
     }
     
     /**
@@ -140,41 +154,12 @@ public class Scheduler {
      * 调度算法：选择下一个要运行的进程
      * 对应 Linux 0.01 的 schedule() 函数
      * 
-     * 算法：选择 counter 最大且状态为 RUNNING 的进程
+     * 委托给 {@link SchedulingAlgorithm} 策略实现，实现算法与调度器的解耦。
      */
     public void schedule() {
         schedulerLock.lock();
         try {
-            Task next = null;
-            int maxCounter = -1;
-            
-            for (Task task : taskTable) {
-                if (task != null && task.getState() == Const.TASK_RUNNING) {
-                    if (task.getCounter() > maxCounter) {
-                        maxCounter = task.getCounter();
-                        next = task;
-                    }
-                }
-            }
-            
-            // 如果没有可运行进程或所有时间片用完，重新分配
-            if (next == null || maxCounter == 0) {
-                for (Task task : taskTable) {
-                    if (task != null && task.getState() != Const.TASK_ZOMBIE) {
-                        task.setCounter(task.getCounter() / 2 + task.getPriority());
-                    }
-                }
-                
-                maxCounter = -1;
-                for (Task task : taskTable) {
-                    if (task != null && task.getState() == Const.TASK_RUNNING) {
-                        if (task.getCounter() > maxCounter) {
-                            maxCounter = task.getCounter();
-                            next = task;
-                        }
-                    }
-                }
-            }
+            Task next = schedulingAlgorithm.selectNextTask(taskTable, currentTask);
             
             if (next != null && next != currentTask) {
                 Task prev = currentTask;
@@ -186,7 +171,6 @@ public class Scheduler {
                     System.out.println("[SCHED] Starting task: " + next.getPid());
                 }
             }
-            
         } finally {
             schedulerLock.unlock();
         }
@@ -225,8 +209,8 @@ public class Scheduler {
         try {
             for (Task task : taskTable) {
                 if (task != null && 
-                    (task.getState() == Const.TASK_INTERRUPTIBLE || 
-                     task.getState() == Const.TASK_UNINTERRUPTIBLE)) {
+                    (task.getState() == ProcessConstants.TASK_INTERRUPTIBLE || 
+                     task.getState() == ProcessConstants.TASK_UNINTERRUPTIBLE)) {
                     task.wakeUp();
                 }
             }

@@ -1,6 +1,6 @@
 package jinux.fs;
 
-import jinux.include.Const;
+import jinux.include.FileSystemConstants;
 
 /**
  * 超级块
@@ -96,21 +96,21 @@ public class SuperBlock {
         this.nzones = nzones;
         
         // 计算位图大小（每个块可以表示 BLOCK_SIZE * 8 个 bit）
-        int bitsPerBlock = Const.BLOCK_SIZE * 8;
+        int bitsPerBlock = FileSystemConstants.BLOCK_SIZE * 8;
         this.imapBlocks = (ninodes + bitsPerBlock - 1) / bitsPerBlock;
         this.zmapBlocks = (nzones + bitsPerBlock - 1) / bitsPerBlock;
         
         // 第一个数据块在所有元数据之后
         // 布局：超级块 | inode位图 | zone位图 | inode表 | 数据区
-        int inodeBlocks = (ninodes * 32 + Const.BLOCK_SIZE - 1) / Const.BLOCK_SIZE;
+        int inodeBlocks = (ninodes * 32 + FileSystemConstants.BLOCK_SIZE - 1) / FileSystemConstants.BLOCK_SIZE;
         this.firstDataZone = 2 + imapBlocks + zmapBlocks + inodeBlocks;
         
         this.logZoneSize = 0; // zone_size = block_size
         this.maxSize = 7 * 1024 + 512 * 1024 + 512 * 512 * 1024; // 简化计算
         
         // 初始化位图
-        int inodeBitmapSize = imapBlocks * Const.BLOCK_SIZE;
-        int zoneBitmapSize = zmapBlocks * Const.BLOCK_SIZE;
+        int inodeBitmapSize = imapBlocks * FileSystemConstants.BLOCK_SIZE;
+        int zoneBitmapSize = zmapBlocks * FileSystemConstants.BLOCK_SIZE;
         this.inodeBitmap = new byte[inodeBitmapSize];
         this.zoneBitmap = new byte[zoneBitmapSize];
         

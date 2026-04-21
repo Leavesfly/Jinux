@@ -1,6 +1,6 @@
 package jinux.mm;
 
-import jinux.include.Const;
+import jinux.include.MemoryConstants;
 
 /**
  * 地址空间
@@ -10,13 +10,13 @@ import jinux.include.Const;
  * 
  * @author Jinux Project
  */
-public class AddressSpace {
+public class AddressSpace implements IAddressSpace {
     
     /** 页表 */
     private final PageTable pageTable;
     
     /** 内存管理器引用 */
-    private final MemoryManager memoryManager;
+    private final IMemoryManager memoryManager;
     
     /** COW 处理器 */
     private final CopyOnWriteHandler cowHandler;
@@ -43,7 +43,7 @@ public class AddressSpace {
     private long stackTop;
     
     /** 用户空间栈顶地址常量 */
-    private static final long USER_STACK_TOP = Const.TASK_SIZE - Const.PAGE_SIZE;
+    private static final long USER_STACK_TOP = MemoryConstants.TASK_SIZE - MemoryConstants.PAGE_SIZE;
     
     /** 默认页面标志：存在、可读写、用户态可访问 */
     private static final int DEFAULT_PAGE_FLAGS = PageTable.PAGE_PRESENT | PageTable.PAGE_RW | PageTable.PAGE_USER;
@@ -53,7 +53,7 @@ public class AddressSpace {
      * 
      * @param memoryManager 内存管理器
      */
-    public AddressSpace(MemoryManager memoryManager) {
+    public AddressSpace(IMemoryManager memoryManager) {
         this.pageTable = new PageTable();
         this.memoryManager = memoryManager;
         this.cowHandler = new CopyOnWriteHandler(memoryManager, pageTable);
@@ -81,7 +81,7 @@ public class AddressSpace {
      * @return 是否成功
      */
     public boolean allocateAndMap(long vaddr, int flags) {
-        int vpage = (int) (vaddr >> Const.PAGE_SHIFT);
+        int vpage = (int) (vaddr >> MemoryConstants.PAGE_SHIFT);
         
         // 检查是否已映射
         if (pageTable.isMapped(vpage)) {
@@ -111,15 +111,15 @@ public class AddressSpace {
         }
         
         // 对齐到页边界
-        long alignedBrk = (newBrk + Const.PAGE_SIZE - 1) & ~(Const.PAGE_SIZE - 1);
+        long alignedBrk = (newBrk + MemoryConstants.PAGE_SIZE - 1) & ~(MemoryConstants.PAGE_SIZE - 1);
         long oldBrk = brk;
         
         // 分配新页面，失败时回滚已分配的页面
-        for (long addr = oldBrk; addr < alignedBrk; addr += Const.PAGE_SIZE) {
+        for (long addr = oldBrk; addr < alignedBrk; addr += MemoryConstants.PAGE_SIZE) {
             if (!allocateAndMap(addr, DEFAULT_PAGE_FLAGS)) {
                 // 回滚：释放本次已分配的所有页面
-                for (long rollbackAddr = oldBrk; rollbackAddr < addr; rollbackAddr += Const.PAGE_SIZE) {
-                    int vpage = (int) (rollbackAddr >> Const.PAGE_SHIFT);
+                for (long rollbackAddr = oldBrk; rollbackAddr < addr; rollbackAddr += MemoryConstants.PAGE_SIZE) {
+                    int vpage = (int) (rollbackAddr >> MemoryConstants.PAGE_SHIFT);
                     int ppage = pageTable.getPhysicalPage(vpage);
                     if (ppage >= 0) {
                         pageTable.unmap(vpage);
@@ -152,7 +152,7 @@ public class AddressSpace {
      * @param value 字节值
      */
     public synchronized void writeByte(long vaddr, byte value) {
-        int vpage = (int) (vaddr >> Const.PAGE_SHIFT);
+        int vpage = (int) (vaddr >> MemoryConstants.PAGE_SHIFT);
         
         // 检查页面权限
         Integer flags = pageTable.getFlags(vpage);
@@ -202,9 +202,9 @@ public class AddressSpace {
         int currentOffset = offset;
         
         while (remaining > 0) {
-            int vpage = (int) (currentVaddr >> Const.PAGE_SHIFT);
-            int pageOffset = (int) (currentVaddr & (Const.PAGE_SIZE - 1));
-            int chunkSize = Math.min(remaining, Const.PAGE_SIZE - pageOffset);
+            int vpage = (int) (currentVaddr >> MemoryConstants.PAGE_SHIFT);
+            int pageOffset = (int) (currentVaddr & (MemoryConstants.PAGE_SIZE - 1));
+            int chunkSize = Math.min(remaining, MemoryConstants.PAGE_SIZE - pageOffset);
             
             // 检查页面权限并处理 COW
             Integer pageFlags = pageTable.getFlags(vpage);
@@ -235,16 +235,17 @@ public class AddressSpace {
      * 
      * @return 新的地址空间副本
      */
-    public synchronized AddressSpace copy() {
+    @Override
+    public synchronized IAddressSpace copy() {
         AddressSpace newSpace = new AddressSpace(memoryManager);
         
         // 复制页表（使用写时复制优化）
         // synchronized 保护整个 copy 过程，防止 copy 期间页表被并发修改
         PageTable oldTable = this.pageTable;
         PageTable newTable = newSpace.pageTable;
-        PhysicalMemory pm = memoryManager.getPhysicalMemory();
+        IPhysicalMemory pm = memoryManager.getPhysicalMemory();
         
-        for (int vpage = 0; vpage < Const.TASK_SIZE >> Const.PAGE_SHIFT; vpage++) {
+        for (int vpage = 0; vpage < MemoryConstants.TASK_SIZE >> MemoryConstants.PAGE_SHIFT; vpage++) {
             if (oldTable.isMapped(vpage)) {
                 int oldPpage = oldTable.getPhysicalPage(vpage);
                 Integer oldFlags = oldTable.getFlags(vpage);
@@ -275,7 +276,7 @@ public class AddressSpace {
      */
     public void free() {
         // 释放所有映射的物理页
-        for (int vpage = 0; vpage < Const.TASK_SIZE >> Const.PAGE_SHIFT; vpage++) {
+        for (int vpage = 0; vpage < MemoryConstants.TASK_SIZE >> MemoryConstants.PAGE_SHIFT; vpage++) {
             if (pageTable.isMapped(vpage)) {
                 int ppage = pageTable.getPhysicalPage(vpage);
                 memoryManager.freePage(ppage);
@@ -287,7 +288,8 @@ public class AddressSpace {
     
     // Getters and setters
     
-    public PageTable getPageTable() {
+    @Override
+    public IPageTable getPageTable() {
         return pageTable;
     }
     

@@ -1,6 +1,6 @@
 package jinux.fs;
 
-import jinux.include.Const;
+import jinux.include.FileSystemConstants;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -63,50 +63,24 @@ public class Inode {
     /** 是否已加载 */
     private volatile boolean loaded;
     
-    // ==================== 文件类型常量 ====================
-    
-    /** 普通文件 */
-    public static final int S_IFREG = 0100000;
-    
-    /** 目录 */
-    public static final int S_IFDIR = 0040000;
-    
-    /** 字符设备 */
-    public static final int S_IFCHR = 0020000;
-    
-    /** 块设备 */
-    public static final int S_IFBLK = 0060000;
-    
-    /** 文件类型掩码 */
-    public static final int S_IFMT = 0170000;
-    
-    // ==================== 权限常量 ====================
-    
-    /** 用户读权限 */
-    public static final int S_IRUSR = 0000400;
-    
-    /** 用户写权限 */
-    public static final int S_IWUSR = 0000200;
-    
-    /** 用户执行权限 */
-    public static final int S_IXUSR = 0000100;
-    
-    /** 组读权限 */
+    /** 文件类型和权限常量统一定义在 {@link FileSystemConstants} 中，以下为便捷引用 */
+    public static final int S_IFREG = FileSystemConstants.S_IFREG;
+    public static final int S_IFDIR = FileSystemConstants.S_IFDIR;
+    public static final int S_IFCHR = FileSystemConstants.S_IFCHR;
+    public static final int S_IFBLK = FileSystemConstants.S_IFBLK;
+    public static final int S_IFMT  = FileSystemConstants.S_IFMT;
+    public static final int S_IRUSR = FileSystemConstants.S_IRUSR;
+    public static final int S_IWUSR = FileSystemConstants.S_IWUSR;
+    public static final int S_IXUSR = FileSystemConstants.S_IXUSR;
+
+    /** 组权限（FileSystemConstants 中未定义，此处补充） */
     public static final int S_IRGRP = 0000040;
-    
-    /** 组写权限 */
     public static final int S_IWGRP = 0000020;
-    
-    /** 组执行权限 */
     public static final int S_IXGRP = 0000010;
-    
-    /** 其他读权限 */
+
+    /** 其他用户权限（FileSystemConstants 中未定义，此处补充） */
     public static final int S_IROTH = 0000004;
-    
-    /** 其他写权限 */
     public static final int S_IWOTH = 0000002;
-    
-    /** 其他执行权限 */
     public static final int S_IXOTH = 0000001;
     
     /**

@@ -1,6 +1,6 @@
 package jinux.mm;
 
-import jinux.include.Const;
+import jinux.include.MemoryConstants;
 
 /**
  * 写时复制（Copy-On-Write）处理器
@@ -14,10 +14,10 @@ import jinux.include.Const;
 public class CopyOnWriteHandler {
     
     /** 内存管理器引用 */
-    private final MemoryManager memoryManager;
+    private final IMemoryManager memoryManager;
     
     /** 页表引用 */
-    private final PageTable pageTable;
+    private final IPageTable pageTable;
     
     /**
      * 构造 COW 处理器
@@ -25,7 +25,7 @@ public class CopyOnWriteHandler {
      * @param memoryManager 内存管理器
      * @param pageTable 页表
      */
-    public CopyOnWriteHandler(MemoryManager memoryManager, PageTable pageTable) {
+    public CopyOnWriteHandler(IMemoryManager memoryManager, IPageTable pageTable) {
         this.memoryManager = memoryManager;
         this.pageTable = pageTable;
     }
@@ -51,7 +51,7 @@ public class CopyOnWriteHandler {
             return -1;
         }
         
-        PhysicalMemory pm = memoryManager.getPhysicalMemory();
+        IPhysicalMemory pm = memoryManager.getPhysicalMemory();
         
         // 如果引用计数为 1，可以直接修改，不需要复制
         if (pm.getPageRefCount(oldPpage) == 1) {
@@ -68,12 +68,12 @@ public class CopyOnWriteHandler {
         }
         
         // 复制页面内容
-        long srcAddr = ((long) oldPpage) << Const.PAGE_SHIFT;
-        long dstAddr = ((long) newPpage) << Const.PAGE_SHIFT;
+        long srcAddr = ((long) oldPpage) << MemoryConstants.PAGE_SHIFT;
+        long dstAddr = ((long) newPpage) << MemoryConstants.PAGE_SHIFT;
         
-        byte[] tempBuf = new byte[Const.PAGE_SIZE];
-        pm.readBytes(srcAddr, tempBuf, 0, Const.PAGE_SIZE);
-        pm.writeBytes(dstAddr, tempBuf, 0, Const.PAGE_SIZE);
+        byte[] tempBuf = new byte[MemoryConstants.PAGE_SIZE];
+        pm.readBytes(srcAddr, tempBuf, 0, MemoryConstants.PAGE_SIZE);
+        pm.writeBytes(dstAddr, tempBuf, 0, MemoryConstants.PAGE_SIZE);
         
         // 减少旧页面的引用计数
         memoryManager.freePage(oldPpage);

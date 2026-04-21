@@ -1,6 +1,6 @@
 package jinux.fs;
 
-import jinux.include.Const;
+import jinux.include.FileSystemConstants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -37,12 +37,12 @@ public class VirtualFileSystemTest {
         Inode rootInode = vfs.getRootInode();
         assertNotNull(rootInode);
         assertEquals(1, rootInode.getIno());
-        assertTrue((rootInode.getMode() & Inode.S_IFDIR) != 0);
+        assertTrue((rootInode.getMode() & FileSystemConstants.S_IFDIR) != 0);
     }
     
     @Test
     void testGetInode() {
-        int dev = Const.ROOT_DEV;
+        int dev = FileSystemConstants.ROOT_DEV;
         int ino = 10;
         
         Inode inode = vfs.getInode(dev, ino);
@@ -56,7 +56,7 @@ public class VirtualFileSystemTest {
     
     @Test
     void testGetInodeCaching() {
-        int dev = Const.ROOT_DEV;
+        int dev = FileSystemConstants.ROOT_DEV;
         int ino = 20;
         
         Inode inode1 = vfs.getInode(dev, ino);
@@ -68,7 +68,7 @@ public class VirtualFileSystemTest {
     
     @Test
     void testPutInode() {
-        int dev = Const.ROOT_DEV;
+        int dev = FileSystemConstants.ROOT_DEV;
         int ino = 30;
         
         Inode inode = vfs.getInode(dev, ino);
@@ -89,7 +89,7 @@ public class VirtualFileSystemTest {
     
     @Test
     void testGetBuffer() {
-        int dev = Const.ROOT_DEV;
+        int dev = FileSystemConstants.ROOT_DEV;
         int blockNo = 5;
         
         BufferCache buffer = vfs.getBuffer(dev, blockNo);
@@ -101,7 +101,7 @@ public class VirtualFileSystemTest {
     
     @Test
     void testGetBufferCaching() {
-        int dev = Const.ROOT_DEV;
+        int dev = FileSystemConstants.ROOT_DEV;
         int blockNo = 10;
         
         BufferCache buffer1 = vfs.getBuffer(dev, blockNo);
@@ -113,7 +113,7 @@ public class VirtualFileSystemTest {
     
     @Test
     void testReleaseBuffer() {
-        int dev = Const.ROOT_DEV;
+        int dev = FileSystemConstants.ROOT_DEV;
         int blockNo = 15;
         
         BufferCache buffer = vfs.getBuffer(dev, blockNo);
@@ -133,7 +133,7 @@ public class VirtualFileSystemTest {
     
     @Test
     void testSync() {
-        int dev = Const.ROOT_DEV;
+        int dev = FileSystemConstants.ROOT_DEV;
         int blockNo = 20;
         
         BufferCache buffer = vfs.getBuffer(dev, blockNo);
@@ -150,14 +150,14 @@ public class VirtualFileSystemTest {
     void testGetRootSuperBlock() {
         SuperBlock rootSuperBlock = vfs.getRootSuperBlock();
         assertNotNull(rootSuperBlock);
-        assertEquals(Const.ROOT_DEV, rootSuperBlock.getDev());
+        assertEquals(FileSystemConstants.ROOT_DEV, rootSuperBlock.getDev());
     }
     
     @Test
     void testGetFileTable() {
         File[] fileTable = vfs.getFileTable();
         assertNotNull(fileTable);
-        assertEquals(Const.NR_FILE, fileTable.length);
+        assertEquals(FileSystemConstants.NR_FILE, fileTable.length);
     }
 }
 

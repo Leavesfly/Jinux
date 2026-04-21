@@ -1,6 +1,6 @@
 package jinux.shell.commands;
 
-import jinux.include.Const;
+import jinux.include.ProcessConstants;
 import jinux.kernel.Task;
 import jinux.shell.Command;
 import jinux.shell.ShellContext;
@@ -42,10 +42,10 @@ public class PsCommand implements Command {
             if (task != null) {
                 found = true;
                 String stateColor = ANSI_GREEN;
-                if (task.getState() == Const.TASK_ZOMBIE) {
+                if (task.getState() == ProcessConstants.TASK_ZOMBIE) {
                     stateColor = ANSI_RED;
-                } else if (task.getState() == Const.TASK_INTERRUPTIBLE
-                        || task.getState() == Const.TASK_UNINTERRUPTIBLE) {
+                } else if (task.getState() == ProcessConstants.TASK_INTERRUPTIBLE
+                        || task.getState() == ProcessConstants.TASK_UNINTERRUPTIBLE) {
                     stateColor = ANSI_YELLOW;
                 }
                 context.println(String.format("%d\t%d\t%s%-12s%s\t%d\t\t%d",

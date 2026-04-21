@@ -1,6 +1,6 @@
 package jinux.mm;
 
-import jinux.include.Const;
+import jinux.include.MemoryConstants;
 
 /**
  * 物理内存管理器
@@ -10,7 +10,7 @@ import jinux.include.Const;
  * 
  * @author Jinux Project
  */
-public class PhysicalMemory {
+public class PhysicalMemory implements IPhysicalMemory {
     
     /** 物理内存数据（模拟） */
     private final byte[] memory;
@@ -37,14 +37,14 @@ public class PhysicalMemory {
      * 构造物理内存管理器
      */
     public PhysicalMemory() {
-        this.memory = new byte[Const.MEMORY_SIZE];
-        this.totalPages = Const.NR_PAGES;
+        this.memory = new byte[MemoryConstants.MEMORY_SIZE];
+        this.totalPages = MemoryConstants.NR_PAGES;
         this.pageMap = new byte[totalPages];
         this.pageRefCount = new int[totalPages];
         this.freeListNext = new int[totalPages];
         
         // 初始化：低端 1MB（内核占用）标记为已使用
-        int kernelPages = Const.KERNEL_MEMORY / Const.PAGE_SIZE;
+        int kernelPages = MemoryConstants.KERNEL_MEMORY / MemoryConstants.PAGE_SIZE;
         for (int i = 0; i < kernelPages; i++) {
             pageMap[i] = 1;
             pageRefCount[i] = 1;
@@ -60,7 +60,7 @@ public class PhysicalMemory {
         this.freePages = totalPages - kernelPages;
         
         System.out.println("[MM] Physical memory initialized: " + 
-            (Const.MEMORY_SIZE / 1024 / 1024) + "MB, " +
+            (MemoryConstants.MEMORY_SIZE / 1024 / 1024) + "MB, " +
             freePages + " pages free");
     }
     
@@ -84,8 +84,8 @@ public class PhysicalMemory {
         freePages--;
         
         // 清零页面内容
-        int offset = pageNo * Const.PAGE_SIZE;
-        java.util.Arrays.fill(memory, offset, offset + Const.PAGE_SIZE, (byte) 0);
+        int offset = pageNo * MemoryConstants.PAGE_SIZE;
+        java.util.Arrays.fill(memory, offset, offset + MemoryConstants.PAGE_SIZE, (byte) 0);
         
         return pageNo;
     }
@@ -219,8 +219,8 @@ public class PhysicalMemory {
      */
     public void printStats() {
         int usedPages = totalPages - freePages;
-        int usedMB = (usedPages * Const.PAGE_SIZE) / 1024 / 1024;
-        int freeMB = (freePages * Const.PAGE_SIZE) / 1024 / 1024;
+        int usedMB = (usedPages * MemoryConstants.PAGE_SIZE) / 1024 / 1024;
+        int freeMB = (freePages * MemoryConstants.PAGE_SIZE) / 1024 / 1024;
         
         System.out.println("[MM] Memory: " + usedPages + "/" + totalPages + " pages used, " +
             usedMB + "MB/" + freeMB + "MB free");

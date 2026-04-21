@@ -1,6 +1,6 @@
 package jinux.fs;
 
-import jinux.include.Const;
+import jinux.include.FileSystemConstants;
 
 /**
  * 文件描述符表
@@ -17,7 +17,7 @@ public class FileDescriptorTable {
      * 构造文件描述符表
      */
     public FileDescriptorTable() {
-        this.files = new File[Const.NR_OPEN];
+        this.files = new File[FileSystemConstants.NR_OPEN];
     }
     
     /**

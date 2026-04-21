@@ -1,6 +1,6 @@
 package jinux.mm;
 
-import jinux.include.Const;
+import jinux.include.MemoryConstants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -37,7 +37,7 @@ public class AddressSpaceTest {
         assertTrue(result);
         
         // 检查是否已映射
-        int vpage = (int) (vaddr >> Const.PAGE_SHIFT);
+        int vpage = (int) (vaddr >> MemoryConstants.PAGE_SHIFT);
         assertTrue(addressSpace.getPageTable().isMapped(vpage));
     }
     
@@ -46,11 +46,11 @@ public class AddressSpaceTest {
         long initialBrk = addressSpace.getBrk();
         
         // 扩展堆
-        long newBrk = addressSpace.expandBrk(initialBrk + Const.PAGE_SIZE);
+        long newBrk = addressSpace.expandBrk(initialBrk + MemoryConstants.PAGE_SIZE);
         assertTrue(newBrk >= initialBrk);
         
         // 再次扩展
-        long newBrk2 = addressSpace.expandBrk(newBrk + Const.PAGE_SIZE);
+        long newBrk2 = addressSpace.expandBrk(newBrk + MemoryConstants.PAGE_SIZE);
         assertTrue(newBrk2 > newBrk);
     }
     
@@ -63,7 +63,7 @@ public class AddressSpaceTest {
         long alignedBrk = addressSpace.expandBrk(unalignedBrk);
         
         // 结果应该是对齐到页边界的
-        assertEquals(0, alignedBrk % Const.PAGE_SIZE);
+        assertEquals(0, alignedBrk % MemoryConstants.PAGE_SIZE);
     }
     
     @Test
@@ -71,7 +71,7 @@ public class AddressSpaceTest {
         long initialBrk = addressSpace.getBrk();
         
         // 尝试缩小堆（应该失败）
-        long smallerBrk = initialBrk - Const.PAGE_SIZE;
+        long smallerBrk = initialBrk - MemoryConstants.PAGE_SIZE;
         long result = addressSpace.expandBrk(smallerBrk);
         
         // 应该保持原来的brk
@@ -150,7 +150,7 @@ public class AddressSpaceTest {
         int flags = PageTable.PAGE_PRESENT | PageTable.PAGE_RW | PageTable.PAGE_USER;
         
         assertTrue(addressSpace.allocateAndMap(vaddr, flags));
-        assertTrue(addressSpace.getPageTable().isMapped((int) (vaddr >> Const.PAGE_SHIFT)));
+        assertTrue(addressSpace.getPageTable().isMapped((int) (vaddr >> MemoryConstants.PAGE_SHIFT)));
         
         // 释放地址空间
         addressSpace.free();

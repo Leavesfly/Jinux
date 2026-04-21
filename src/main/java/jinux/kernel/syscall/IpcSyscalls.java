@@ -1,6 +1,6 @@
 package jinux.kernel.syscall;
 
-import jinux.include.Const;
+import jinux.include.ErrorCode;
 import jinux.include.Syscalls;
 import jinux.kernel.Task;
 import jinux.kernel.SystemCallDispatcher;
@@ -44,14 +44,14 @@ public class IpcSyscalls {
         int readFd = task.getFdTable().allocate(createPipeFileWrapper(readEnd));
         if (readFd < 0) {
             System.err.println("[SYSCALL] pipe: failed to allocate read fd");
-            return -Const.EMFILE;
+            return -ErrorCode.EMFILE;
         }
 
         int writeFd = task.getFdTable().allocate(createPipeFileWrapper(writeEnd));
         if (writeFd < 0) {
             System.err.println("[SYSCALL] pipe: failed to allocate write fd");
             task.getFdTable().close(readFd);
-            return -Const.EMFILE;
+            return -ErrorCode.EMFILE;
         }
 
         System.out.println("[SYSCALL] pipe() created: " + pipe +

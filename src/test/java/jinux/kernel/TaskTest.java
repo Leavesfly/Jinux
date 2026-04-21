@@ -1,6 +1,6 @@
 package jinux.kernel;
 
-import jinux.include.Const;
+import jinux.include.ProcessConstants;
 import jinux.mm.AddressSpace;
 import jinux.mm.MemoryManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,9 +27,9 @@ public class TaskTest {
         
         assertEquals(1, task.getPid());
         assertEquals(0, task.getPpid());
-        assertEquals(Const.TASK_RUNNING, task.getState());
-        assertEquals(Const.DEF_PRIORITY, task.getPriority());
-        assertEquals(Const.DEF_COUNTER, task.getCounter());
+        assertEquals(ProcessConstants.TASK_RUNNING, task.getState());
+        assertEquals(ProcessConstants.DEF_PRIORITY, task.getPriority());
+        assertEquals(ProcessConstants.DEF_COUNTER, task.getCounter());
         assertNotNull(task.getFdTable());
         assertEquals(1, task.getCurrentWorkingDir());
         assertEquals(0, task.getExitCode());
@@ -41,14 +41,14 @@ public class TaskTest {
         
         // 测试切换到睡眠状态
         task.sleep(true);
-        assertEquals(Const.TASK_INTERRUPTIBLE, task.getState());
+        assertEquals(ProcessConstants.TASK_INTERRUPTIBLE, task.getState());
         
         task.sleep(false);
-        assertEquals(Const.TASK_UNINTERRUPTIBLE, task.getState());
+        assertEquals(ProcessConstants.TASK_UNINTERRUPTIBLE, task.getState());
         
         // 测试唤醒
         task.wakeUp();
-        assertEquals(Const.TASK_RUNNING, task.getState());
+        assertEquals(ProcessConstants.TASK_RUNNING, task.getState());
     }
     
     @Test
@@ -90,7 +90,7 @@ public class TaskTest {
         task.exit(exitCode);
         
         assertEquals(exitCode, task.getExitCode());
-        assertEquals(Const.TASK_ZOMBIE, task.getState());
+        assertEquals(ProcessConstants.TASK_ZOMBIE, task.getState());
     }
     
     @Test
@@ -134,17 +134,17 @@ public class TaskTest {
         
         // SIGKILL应该立即唤醒进程
         task.sendSignal(Signal.SIGKILL);
-        assertEquals(Const.TASK_RUNNING, task.getState());
+        assertEquals(ProcessConstants.TASK_RUNNING, task.getState());
     }
     
     @Test
     void testSignalCont() {
         Task task = new Task(1, 0, addressSpace);
-        task.setState(Const.TASK_STOPPED);
+        task.setState(ProcessConstants.TASK_STOPPED);
         
         // SIGCONT应该唤醒停止的进程
         task.sendSignal(Signal.SIGCONT);
-        assertEquals(Const.TASK_RUNNING, task.getState());
+        assertEquals(ProcessConstants.TASK_RUNNING, task.getState());
     }
     
     @Test
@@ -176,7 +176,7 @@ public class TaskTest {
         task.exit(0);
         assertEquals("ZOMBIE", task.getStateName());
         
-        task.setState(Const.TASK_STOPPED);
+        task.setState(ProcessConstants.TASK_STOPPED);
         assertEquals("STOPPED", task.getStateName());
     }
     

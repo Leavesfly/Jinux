@@ -131,4 +131,14 @@ public class ProcessConstants {
      * </p>
      */
     public static final int DEF_PRIORITY = 15;
+
+    /**
+     * execve 参数数组最大元素数（argv/envp）
+     */
+    public static final int MAX_EXEC_ARGS = 64;
+
+    /**
+     * 初始化进程分配的初始页面数
+     */
+    public static final int INIT_PROCESS_PAGES = 4;
 }

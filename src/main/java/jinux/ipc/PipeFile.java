@@ -1,6 +1,6 @@
 package jinux.ipc;
 
-import jinux.include.Const;
+import jinux.include.ErrorCode;
 
 /**
  * 管道文件描述符包装
@@ -32,7 +32,7 @@ public class PipeFile {
      */
     public int read(byte[] buf, int count) {
         if (!isReadEnd) {
-            return -Const.EBADF;
+            return -ErrorCode.EBADF;
         }
         return pipe.read(buf, count);
     }
@@ -42,7 +42,7 @@ public class PipeFile {
      */
     public int write(byte[] buf, int count) {
         if (isReadEnd) {
-            return -Const.EBADF;
+            return -ErrorCode.EBADF;
         }
         return pipe.write(buf, count);
     }

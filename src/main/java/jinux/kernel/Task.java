@@ -1,7 +1,8 @@
 package jinux.kernel;
 
-import jinux.include.Const;
+import jinux.include.ProcessConstants;
 import jinux.mm.AddressSpace;
+import jinux.mm.IAddressSpace;
 import jinux.fs.FileDescriptorTable;
 
 /**
@@ -30,7 +31,7 @@ public class Task {
     private int priority;
     
     /** 地址空间 */
-    private AddressSpace addressSpace;
+    private IAddressSpace addressSpace;
     
     /** 文件描述符表 */
     private FileDescriptorTable fdTable;
@@ -75,15 +76,15 @@ public class Task {
      * @param ppid 父进程 ID
      * @param addressSpace 地址空间
      */
-    public Task(int pid, int ppid, AddressSpace addressSpace) {
+    public Task(int pid, int ppid, IAddressSpace addressSpace) {
         this.pid = pid;
         this.ppid = ppid;
-        this.state = Const.TASK_RUNNING;
-        this.priority = Const.DEF_PRIORITY;
-        this.counter = Const.DEF_COUNTER;
+        this.state = ProcessConstants.TASK_RUNNING;
+        this.priority = ProcessConstants.DEF_PRIORITY;
+        this.counter = ProcessConstants.DEF_COUNTER;
         this.addressSpace = addressSpace;
         this.fdTable = new FileDescriptorTable();
-        this.currentWorkingDir = 1; // 根目录 inode 号
+        this.currentWorkingDir = jinux.include.FileSystemConstants.ROOT_INODE;
         this.exitCode = 0;
         this.utime = 0;
         this.stime = 0;
@@ -103,7 +104,7 @@ public class Task {
      * 切换到运行状态
      */
     public void switchToRunning() {
-        this.state = Const.TASK_RUNNING;
+        this.state = ProcessConstants.TASK_RUNNING;
     }
     
     /**
@@ -112,15 +113,15 @@ public class Task {
      * @param interruptible 是否可中断
      */
     public void sleep(boolean interruptible) {
-        this.state = interruptible ? Const.TASK_INTERRUPTIBLE : Const.TASK_UNINTERRUPTIBLE;
+        this.state = interruptible ? ProcessConstants.TASK_INTERRUPTIBLE : ProcessConstants.TASK_UNINTERRUPTIBLE;
     }
     
     /**
      * 唤醒进程
      */
     public void wakeUp() {
-        if (state == Const.TASK_INTERRUPTIBLE || state == Const.TASK_UNINTERRUPTIBLE) {
-            state = Const.TASK_RUNNING;
+        if (state == ProcessConstants.TASK_INTERRUPTIBLE || state == ProcessConstants.TASK_UNINTERRUPTIBLE) {
+            state = ProcessConstants.TASK_RUNNING;
         }
     }
     
@@ -131,7 +132,7 @@ public class Task {
      */
     public void exit(int code) {
         this.exitCode = code;
-        this.state = Const.TASK_ZOMBIE;
+        this.state = ProcessConstants.TASK_ZOMBIE;
         
         // 关闭所有打开的文件
         if (fdTable != null) {
@@ -161,7 +162,7 @@ public class Task {
         
         // 保留标准文件描述符（stdin, stdout, stderr），关闭其他
         if (fdTable != null) {
-            for (int fd = 3; fd < 64; fd++) {
+            for (int fd = 3; fd < jinux.include.FileSystemConstants.FD_TABLE_SIZE; fd++) {
                 fdTable.close(fd);
             }
         }
@@ -192,7 +193,7 @@ public class Task {
      * 是否可以运行
      */
     public boolean isRunnable() {
-        return state == Const.TASK_RUNNING && counter > 0;
+        return state == ProcessConstants.TASK_RUNNING && counter > 0;
     }
     
     /**
@@ -200,11 +201,11 @@ public class Task {
      */
     public String getStateName() {
         switch (state) {
-            case Const.TASK_RUNNING: return "RUNNING";
-            case Const.TASK_INTERRUPTIBLE: return "INTERRUPTIBLE";
-            case Const.TASK_UNINTERRUPTIBLE: return "UNINTERRUPTIBLE";
-            case Const.TASK_ZOMBIE: return "ZOMBIE";
-            case Const.TASK_STOPPED: return "STOPPED";
+            case ProcessConstants.TASK_RUNNING: return "RUNNING";
+            case ProcessConstants.TASK_INTERRUPTIBLE: return "INTERRUPTIBLE";
+            case ProcessConstants.TASK_UNINTERRUPTIBLE: return "UNINTERRUPTIBLE";
+            case ProcessConstants.TASK_ZOMBIE: return "ZOMBIE";
+            case ProcessConstants.TASK_STOPPED: return "STOPPED";
             default: return "UNKNOWN";
         }
     }
@@ -253,11 +254,11 @@ public class Task {
         this.priority = priority;
     }
     
-    public AddressSpace getAddressSpace() {
+    public IAddressSpace getAddressSpace() {
         return addressSpace;
     }
     
-    public void setAddressSpace(AddressSpace addressSpace) {
+    public void setAddressSpace(IAddressSpace addressSpace) {
         this.addressSpace = addressSpace;
     }
     
@@ -364,8 +365,8 @@ public class Task {
         }
         
         // SIGCONT 唤醒停止的进程
-        if (signum == Signal.SIGCONT && state == Const.TASK_STOPPED) {
-            state = Const.TASK_RUNNING;
+        if (signum == Signal.SIGCONT && state == ProcessConstants.TASK_STOPPED) {
+            state = ProcessConstants.TASK_RUNNING;
         }
     }
     

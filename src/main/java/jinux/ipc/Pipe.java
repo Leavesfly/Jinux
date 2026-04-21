@@ -1,6 +1,6 @@
 package jinux.ipc;
 
-import jinux.include.Const;
+import jinux.include.ErrorCode;
 
 /**
  * 管道（Pipe）
@@ -66,7 +66,7 @@ public class Pipe {
      */
     public synchronized int read(byte[] buf, int count) {
         if (count <= 0 || buf == null) {
-            return -Const.EINVAL;
+            return -ErrorCode.EINVAL;
         }
         
         // 等待数据可用
@@ -82,7 +82,7 @@ public class Pipe {
                 wait();
             } catch (InterruptedException e) {
                 waitingReaders--;
-                return -Const.EINTR;
+                return -ErrorCode.EINTR;
             }
             waitingReaders--;
         }
@@ -118,13 +118,13 @@ public class Pipe {
      */
     public synchronized int write(byte[] buf, int count) {
         if (count <= 0 || buf == null) {
-            return -Const.EINVAL;
+            return -ErrorCode.EINVAL;
         }
         
         // 检查是否有读端
         if (readers == 0) {
             // 没有读端，发送 SIGPIPE 信号
-            return -Const.EPIPE;
+            return -ErrorCode.EPIPE;
         }
         
         int bytesWritten = 0;
@@ -133,7 +133,7 @@ public class Pipe {
             // 等待空间可用
             while (dataSize >= PIPE_BUF) {
                 if (readers == 0) {
-                    return -Const.EPIPE;
+                    return -ErrorCode.EPIPE;
                 }
                 
                 waitingWriters++;
@@ -141,7 +141,7 @@ public class Pipe {
                     wait();
                 } catch (InterruptedException e) {
                     waitingWriters--;
-                    return bytesWritten > 0 ? bytesWritten : -Const.EINTR;
+                    return bytesWritten > 0 ? bytesWritten : -ErrorCode.EINTR;
                 }
                 waitingWriters--;
             }

@@ -1,6 +1,6 @@
 package jinux.drivers;
 
-import jinux.include.Const;
+import jinux.include.FileSystemConstants;
 
 /**
  * 块设备
@@ -15,7 +15,7 @@ public abstract class BlockDevice extends Device {
     
     public BlockDevice(String name, int major, int minor) {
         super(name, major, minor);
-        this.blockSize = Const.BLOCK_SIZE;
+        this.blockSize = FileSystemConstants.BLOCK_SIZE;
     }
     
     /**

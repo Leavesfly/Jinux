@@ -1,12 +1,14 @@
 package jinux.kernel.syscall;
 
-import jinux.include.Const;
+import jinux.include.ErrorCode;
+import jinux.include.ProcessConstants;
+import jinux.include.FileSystemConstants;
 import jinux.include.Syscalls;
 import jinux.kernel.Task;
 import jinux.kernel.Scheduler;
 import jinux.kernel.Signal;
 import jinux.kernel.SystemCallDispatcher;
-import jinux.mm.MemoryManager;
+import jinux.mm.IMemoryManager;
 import jinux.fs.VirtualFileSystem;
 import jinux.fs.Inode;
 import jinux.exec.ProgramLoader;
@@ -24,13 +26,12 @@ import java.util.Map;
 public class ProcessSyscalls {
 
     private final Scheduler scheduler;
-    private final MemoryManager memoryManager;
+    private final IMemoryManager memoryManager;
     private VirtualFileSystem vfs;
 
-    /** copyStringFromUser 的最大长度限制，防止 OOM */
-    private static final int MAX_STRING_LENGTH = 4096;
 
-    public ProcessSyscalls(Scheduler scheduler, MemoryManager memoryManager) {
+
+    public ProcessSyscalls(Scheduler scheduler, IMemoryManager memoryManager) {
         this.scheduler = scheduler;
         this.memoryManager = memoryManager;
     }
@@ -73,7 +74,7 @@ public class ProcessSyscalls {
 
         if (!scheduler.addTask(child)) {
             childAddrSpace.free();
-            return -Const.ENOMEM;
+            return -ErrorCode.ENOMEM;
         }
 
         System.out.println("[SYSCALL] fork() created child pid=" + childPid);
@@ -105,7 +106,7 @@ public class ProcessSyscalls {
 
         for (Task candidate : scheduler.getTaskTable()) {
             if (candidate != null && candidate.getPpid() == task.getPid()
-                    && candidate.getState() == Const.TASK_ZOMBIE) {
+                    && candidate.getState() == ProcessConstants.TASK_ZOMBIE) {
                 int childPid = candidate.getPid();
                 scheduler.removeTask(childPid);
                 System.out.println("[SYSCALL] wait() collected zombie child pid=" + childPid);
@@ -115,7 +116,7 @@ public class ProcessSyscalls {
 
         task.sleep(true);
         scheduler.schedule();
-        return -Const.EINTR;
+        return -ErrorCode.EINTR;
     }
 
     /**
@@ -139,7 +140,7 @@ public class ProcessSyscalls {
         String programPath = copyStringFromUser(task, filename, 256);
         if (programPath == null || programPath.isEmpty()) {
             System.err.println("[SYSCALL] execve: invalid filename pointer");
-            return -Const.EFAULT;
+            return -ErrorCode.EFAULT;
         }
 
         System.out.println("[SYSCALL] execve(\"" + programPath + "\") called by pid=" + task.getPid());
@@ -149,7 +150,7 @@ public class ProcessSyscalls {
 
         if (vfs != null) {
             Inode currentDir = resolveCurrentDir(task);
-            Inode programInode = vfs.namei(programPath, currentDir);
+            Inode programInode = vfs.resolve(programPath, currentDir);
             if (programInode != null && programInode.isRegularFile()) {
                 String programName = extractProgramName(programPath);
                 int result = ProgramLoader.loadProgram(task, programName, args, env);
@@ -167,7 +168,7 @@ public class ProcessSyscalls {
 
         if (result < 0) {
             System.err.println("[SYSCALL] execve() failed: program not found");
-            return -Const.ENOENT;
+            return -ErrorCode.ENOENT;
         }
 
         startExecutedProgram(task);
@@ -181,7 +182,7 @@ public class ProcessSyscalls {
         System.out.println("[SYSCALL] pause() called by pid=" + task.getPid());
         task.sleep(true);
         scheduler.schedule();
-        return -Const.EINTR;
+        return -ErrorCode.EINTR;
     }
 
     // ==================== 辅助方法 ====================
@@ -190,7 +191,7 @@ public class ProcessSyscalls {
         Inode currentDir = null;
         int cwdIno = task.getCurrentWorkingDir();
         if (cwdIno > 0 && vfs != null) {
-            currentDir = vfs.getInode(Const.ROOT_DEV, cwdIno);
+            currentDir = vfs.getInode(FileSystemConstants.ROOT_DEV, cwdIno);
         }
         if (currentDir == null && vfs != null) {
             currentDir = vfs.getRootInode();
@@ -216,13 +217,12 @@ public class ProcessSyscalls {
 
         List<String> strings = new ArrayList<>();
         try {
-            int maxElements = 64;
-            for (int i = 0; i < maxElements; i++) {
+            for (int i = 0; i < ProcessConstants.MAX_EXEC_ARGS; i++) {
                 long ptr = readLongFromUser(task, arrayPtr + i * 8);
                 if (ptr == 0) {
                     break;
                 }
-                String str = copyStringFromUser(task, ptr, 256);
+                String str = copyStringFromUser(task, ptr, FileSystemConstants.MAX_PATH_LENGTH);
                 if (str != null) {
                     strings.add(str);
                 }
@@ -268,51 +268,15 @@ public class ProcessSyscalls {
         }
     }
 
-    /**
-     * 从用户空间读取字符串，限制最大长度防止 OOM
-     */
     String copyStringFromUser(Task task, long userPtr, int maxLen) {
-        if (userPtr == 0 || maxLen <= 0) {
-            return null;
-        }
-        maxLen = Math.min(maxLen, MAX_STRING_LENGTH);
-        try {
-            byte[] buf = new byte[maxLen];
-            task.getAddressSpace().readBytes(userPtr, buf, 0, maxLen);
-            int len = 0;
-            while (len < maxLen && buf[len] != 0) {
-                len++;
-            }
-            return new String(buf, 0, len, "UTF-8");
-        } catch (Exception e) {
-            System.err.println("[SYSCALL] Failed to copy string from user space: " + e.getMessage());
-            return null;
-        }
+        return UserSpaceCopier.copyStringFromUser(task, userPtr, maxLen);
     }
 
     int copyFromUser(Task task, long userPtr, byte[] buf, int offset, int len) {
-        if (userPtr == 0 || buf == null || len <= 0) {
-            return -1;
-        }
-        try {
-            task.getAddressSpace().readBytes(userPtr, buf, offset, len);
-            return len;
-        } catch (Exception e) {
-            System.err.println("[SYSCALL] Failed to copy from user space: " + e.getMessage());
-            return -1;
-        }
+        return UserSpaceCopier.copyFromUser(task, userPtr, buf, offset, len);
     }
 
     int copyToUser(Task task, long userPtr, byte[] buf, int offset, int len) {
-        if (userPtr == 0 || buf == null || len <= 0) {
-            return -1;
-        }
-        try {
-            task.getAddressSpace().writeBytes(userPtr, buf, offset, len);
-            return len;
-        } catch (Exception e) {
-            System.err.println("[SYSCALL] Failed to copy to user space: " + e.getMessage());
-            return -1;
-        }
+        return UserSpaceCopier.copyToUser(task, userPtr, buf, offset, len);
     }
 }

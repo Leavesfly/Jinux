@@ -3,9 +3,10 @@ package jinux.demo;
 import jinux.kernel.Kernel;
 import jinux.kernel.Task;
 import jinux.kernel.Scheduler;
-import jinux.mm.MemoryManager;
+import jinux.mm.IMemoryManager;
 import jinux.drivers.ConsoleDevice;
-import jinux.include.Const;
+import jinux.include.ProcessConstants;
+import jinux.include.MemoryConstants;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -102,15 +103,15 @@ public class Visualizer {
      */
     private static String getStateColor(int state) {
         switch (state) {
-            case Const.TASK_RUNNING:
+            case ProcessConstants.TASK_RUNNING:
                 return ANSI_GREEN;
-            case Const.TASK_INTERRUPTIBLE:
+            case ProcessConstants.TASK_INTERRUPTIBLE:
                 return ANSI_YELLOW;
-            case Const.TASK_UNINTERRUPTIBLE:
+            case ProcessConstants.TASK_UNINTERRUPTIBLE:
                 return ANSI_BLUE;
-            case Const.TASK_ZOMBIE:
+            case ProcessConstants.TASK_ZOMBIE:
                 return ANSI_RED;
-            case Const.TASK_STOPPED:
+            case ProcessConstants.TASK_STOPPED:
                 return ANSI_RESET;
             default:
                 return ANSI_RESET;
@@ -123,7 +124,7 @@ public class Visualizer {
      */
     public static void visualizeMemoryLayout(Kernel kernel) {
         ConsoleDevice console = kernel.getConsole();
-        MemoryManager mm = kernel.getMemoryManager();
+        IMemoryManager mm = kernel.getMemoryManager();
         
         console.println("\n" + ANSI_BOLD + "╔══════════════════════════════════════════════════════════╗" + ANSI_RESET);
         console.println(ANSI_BOLD + "║              Memory Layout Visualization            ║" + ANSI_RESET);
@@ -137,11 +138,11 @@ public class Visualizer {
         
         console.println("\n" + ANSI_BOLD + "Physical Memory Usage:" + ANSI_RESET);
         console.println(String.format("  Total Pages: %d (%d MB)", totalPages, 
-            (totalPages * Const.PAGE_SIZE) / 1024 / 1024));
+            (totalPages * MemoryConstants.PAGE_SIZE) / 1024 / 1024));
         console.println(String.format("  Used Pages:  %d (%d MB)", usedPages, 
-            (usedPages * Const.PAGE_SIZE) / 1024 / 1024));
+            (usedPages * MemoryConstants.PAGE_SIZE) / 1024 / 1024));
         console.println(String.format("  Free Pages:  %d (%d MB)", freePages, 
-            (freePages * Const.PAGE_SIZE) / 1024 / 1024));
+            (freePages * MemoryConstants.PAGE_SIZE) / 1024 / 1024));
         
         // 绘制进度条（宽度50字符）
         int barWidth = 50;
@@ -488,7 +489,7 @@ public class Visualizer {
     public static void showDashboard(Kernel kernel) {
         ConsoleDevice console = kernel.getConsole();
         Scheduler scheduler = kernel.getScheduler();
-        MemoryManager mm = kernel.getMemoryManager();
+        IMemoryManager mm = kernel.getMemoryManager();
         
         console.println("\n" + ANSI_BOLD + ANSI_CYAN + "╔══════════════════════════════════════════════════════════╗" + ANSI_RESET);
         console.println(ANSI_BOLD + ANSI_CYAN + "║              Jinux System Dashboard                 ║" + ANSI_RESET);
@@ -496,7 +497,7 @@ public class Visualizer {
         
         // 系统运行时间
         long uptime = scheduler.getJiffies();
-        long seconds = uptime / Const.HZ;
+        long seconds = uptime / ProcessConstants.HZ;
         long minutes = seconds / 60;
         long hours = minutes / 60;
         
@@ -516,14 +517,14 @@ public class Visualizer {
             if (task != null) {
                 totalTasks++;
                 switch (task.getState()) {
-                    case Const.TASK_RUNNING:
+                    case ProcessConstants.TASK_RUNNING:
                         runningTasks++;
                         break;
-                    case Const.TASK_INTERRUPTIBLE:
-                    case Const.TASK_UNINTERRUPTIBLE:
+                    case ProcessConstants.TASK_INTERRUPTIBLE:
+                    case ProcessConstants.TASK_UNINTERRUPTIBLE:
                         waitingTasks++;
                         break;
-                    case Const.TASK_ZOMBIE:
+                    case ProcessConstants.TASK_ZOMBIE:
                         zombieTasks++;
                         break;
                 }

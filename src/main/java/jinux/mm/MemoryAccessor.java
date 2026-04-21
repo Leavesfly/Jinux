@@ -1,6 +1,6 @@
 package jinux.mm;
 
-import jinux.include.Const;
+import jinux.include.MemoryConstants;
 
 /**
  * 内存访问器
@@ -13,10 +13,10 @@ import jinux.include.Const;
 public class MemoryAccessor {
     
     /** 页表引用 */
-    private final PageTable pageTable;
+    private final IPageTable pageTable;
     
     /** 物理内存引用 */
-    private final PhysicalMemory physicalMemory;
+    private final IPhysicalMemory physicalMemory;
     
     /**
      * 构造内存访问器
@@ -24,7 +24,7 @@ public class MemoryAccessor {
      * @param pageTable 页表
      * @param physicalMemory 物理内存
      */
-    public MemoryAccessor(PageTable pageTable, PhysicalMemory physicalMemory) {
+    public MemoryAccessor(IPageTable pageTable, IPhysicalMemory physicalMemory) {
         this.pageTable = pageTable;
         this.physicalMemory = physicalMemory;
     }
@@ -78,8 +78,8 @@ public class MemoryAccessor {
         
         while (remaining > 0) {
             // 计算当前页内可读的字节数
-            int pageOffset = (int) (currentVaddr & (Const.PAGE_SIZE - 1));
-            int chunkSize = Math.min(remaining, Const.PAGE_SIZE - pageOffset);
+            int pageOffset = (int) (currentVaddr & (MemoryConstants.PAGE_SIZE - 1));
+            int chunkSize = Math.min(remaining, MemoryConstants.PAGE_SIZE - pageOffset);
             
             long paddr = pageTable.translate(currentVaddr);
             if (paddr < 0) {
@@ -110,8 +110,8 @@ public class MemoryAccessor {
         int currentOffset = offset;
         
         while (remaining > 0) {
-            int pageOffset = (int) (currentVaddr & (Const.PAGE_SIZE - 1));
-            int chunkSize = Math.min(remaining, Const.PAGE_SIZE - pageOffset);
+            int pageOffset = (int) (currentVaddr & (MemoryConstants.PAGE_SIZE - 1));
+            int chunkSize = Math.min(remaining, MemoryConstants.PAGE_SIZE - pageOffset);
             
             long paddr = pageTable.translate(currentVaddr);
             if (paddr < 0) {

@@ -4,7 +4,7 @@ import jinux.kernel.Kernel;
 import jinux.kernel.Task;
 import jinux.kernel.Scheduler;
 import jinux.kernel.Signal;
-import jinux.mm.MemoryManager;
+import jinux.mm.IMemoryManager;
 import jinux.ipc.Pipe;
 import jinux.lib.LibC;
 import jinux.drivers.ConsoleDevice;

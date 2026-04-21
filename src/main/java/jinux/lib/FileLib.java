@@ -11,8 +11,8 @@ import jinux.kernel.Task;
  */
 public class FileLib {
     
-    /** 用户空间缓冲区基址（位于栈下方的保留区域，63MB 处） */
-    private static final long USER_BUF_BASE = 0x03F00000L;
+    /** 用户空间缓冲区基址 */
+    private static final long USER_BUF_BASE = jinux.include.MemoryConstants.USER_BUF_BASE;
     
     private final SystemCallDispatcher syscallDispatcher;
     private final Scheduler scheduler;

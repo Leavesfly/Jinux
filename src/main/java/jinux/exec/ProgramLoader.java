@@ -1,8 +1,8 @@
 package jinux.exec;
 
 import jinux.kernel.Task;
-import jinux.mm.AddressSpace;
-import jinux.include.Const;
+import jinux.mm.IAddressSpace;
+import jinux.include.ErrorCode;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -52,11 +52,11 @@ public class ProgramLoader {
         ExecutableProgram program = programs.get(pathname);
         if (program == null) {
             System.err.println("[EXEC] Program not found: " + pathname);
-            return -Const.ENOENT;
+            return -ErrorCode.ENOENT;
         }
         
         // 清理当前地址空间
-        AddressSpace addrSpace = task.getAddressSpace();
+        IAddressSpace addrSpace = task.getAddressSpace();
         if (addrSpace != null) {
             // 在实际实现中应该释放旧的内存
             System.out.println("[EXEC] Cleaning old address space");
