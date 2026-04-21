@@ -40,7 +40,7 @@ public class SchedulerTest {
     
     @Test
     void testAddTask() {
-        AddressSpace addressSpace = memoryManager.createAddressSpace();
+        AddressSpace addressSpace = (AddressSpace) memoryManager.createAddressSpace();
         Task task = new Task(scheduler.allocatePid(), 0, addressSpace);
         
         assertTrue(scheduler.addTask(task));
@@ -49,7 +49,7 @@ public class SchedulerTest {
     
     @Test
     void testFindTask() {
-        AddressSpace addressSpace = memoryManager.createAddressSpace();
+        AddressSpace addressSpace = (AddressSpace) memoryManager.createAddressSpace();
         Task task = new Task(scheduler.allocatePid(), 0, addressSpace);
         scheduler.addTask(task);
         
@@ -63,7 +63,7 @@ public class SchedulerTest {
     
     @Test
     void testRemoveTask() {
-        AddressSpace addressSpace = memoryManager.createAddressSpace();
+        AddressSpace addressSpace = (AddressSpace) memoryManager.createAddressSpace();
         Task task = new Task(scheduler.allocatePid(), 0, addressSpace);
         scheduler.addTask(task);
         
@@ -75,8 +75,8 @@ public class SchedulerTest {
     
     @Test
     void testSchedule() {
-        AddressSpace addressSpace1 = memoryManager.createAddressSpace();
-        AddressSpace addressSpace2 = memoryManager.createAddressSpace();
+        AddressSpace addressSpace1 = (AddressSpace) memoryManager.createAddressSpace();
+        AddressSpace addressSpace2 = (AddressSpace) memoryManager.createAddressSpace();
         
         Task task1 = new Task(scheduler.allocatePid(), 0, addressSpace1);
         task1.setCounter(10);
@@ -98,7 +98,7 @@ public class SchedulerTest {
     
     @Test
     void testScheduleWithZeroCounter() {
-        AddressSpace addressSpace = memoryManager.createAddressSpace();
+        AddressSpace addressSpace = (AddressSpace) memoryManager.createAddressSpace();
         Task task = new Task(scheduler.allocatePid(), 0, addressSpace);
         task.setCounter(0);
         task.setPriority(15);
@@ -114,7 +114,7 @@ public class SchedulerTest {
     
     @Test
     void testTimerInterrupt() {
-        AddressSpace addressSpace = memoryManager.createAddressSpace();
+        AddressSpace addressSpace = (AddressSpace) memoryManager.createAddressSpace();
         Task task = new Task(scheduler.allocatePid(), 0, addressSpace);
         task.setCounter(10);
         scheduler.addTask(task);
@@ -133,7 +133,7 @@ public class SchedulerTest {
     
     @Test
     void testTimerInterruptTriggersSchedule() {
-        AddressSpace addressSpace = memoryManager.createAddressSpace();
+        AddressSpace addressSpace = (AddressSpace) memoryManager.createAddressSpace();
         Task task = new Task(scheduler.allocatePid(), 0, addressSpace);
         task.setCounter(1);
         scheduler.addTask(task);
@@ -148,7 +148,7 @@ public class SchedulerTest {
     
     @Test
     void testSleep() {
-        AddressSpace addressSpace = memoryManager.createAddressSpace();
+        AddressSpace addressSpace = (AddressSpace) memoryManager.createAddressSpace();
         Task task = new Task(scheduler.allocatePid(), 0, addressSpace);
         scheduler.addTask(task);
         scheduler.schedule();
@@ -161,8 +161,8 @@ public class SchedulerTest {
     
     @Test
     void testWakeUp() {
-        AddressSpace addressSpace1 = memoryManager.createAddressSpace();
-        AddressSpace addressSpace2 = memoryManager.createAddressSpace();
+        AddressSpace addressSpace1 = (AddressSpace) memoryManager.createAddressSpace();
+        AddressSpace addressSpace2 = (AddressSpace) memoryManager.createAddressSpace();
         
         Task task1 = new Task(scheduler.allocatePid(), 0, addressSpace1);
         Task task2 = new Task(scheduler.allocatePid(), 0, addressSpace2);
@@ -183,13 +183,13 @@ public class SchedulerTest {
     void testTaskTableFull() {
         // 尝试添加超过最大数量的任务
         for (int i = 0; i < ProcessConstants.NR_TASKS; i++) {
-            AddressSpace addressSpace = memoryManager.createAddressSpace();
+            AddressSpace addressSpace = (AddressSpace) memoryManager.createAddressSpace();
             Task task = new Task(scheduler.allocatePid(), 0, addressSpace);
             assertTrue(scheduler.addTask(task));
         }
         
         // 再添加一个应该失败
-        AddressSpace addressSpace = memoryManager.createAddressSpace();
+        AddressSpace addressSpace = (AddressSpace) memoryManager.createAddressSpace();
         Task task = new Task(scheduler.allocatePid(), 0, addressSpace);
         assertTrue(scheduler.addTask(task)); // 注意：当前实现可能不会检查上限
     }

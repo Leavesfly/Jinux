@@ -18,7 +18,7 @@ public class TaskTest {
     @BeforeEach
     void setUp() {
         memoryManager = new MemoryManager();
-        addressSpace = memoryManager.createAddressSpace();
+        addressSpace = (AddressSpace) memoryManager.createAddressSpace();
     }
     
     @Test

@@ -49,15 +49,15 @@ public class MemoryManagerTest {
     
     @Test
     void testCreateAddressSpace() {
-        AddressSpace addressSpace = memoryManager.createAddressSpace();
+        AddressSpace addressSpace = (AddressSpace) memoryManager.createAddressSpace();
         assertNotNull(addressSpace);
         assertNotNull(addressSpace.getPageTable());
     }
     
     @Test
     void testMultipleAddressSpaces() {
-        AddressSpace space1 = memoryManager.createAddressSpace();
-        AddressSpace space2 = memoryManager.createAddressSpace();
+        AddressSpace space1 = (AddressSpace) memoryManager.createAddressSpace();
+        AddressSpace space2 = (AddressSpace) memoryManager.createAddressSpace();
         
         assertNotNull(space1);
         assertNotNull(space2);

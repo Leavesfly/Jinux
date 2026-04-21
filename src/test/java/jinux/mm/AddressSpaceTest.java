@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class AddressSpaceTest {
     
     private MemoryManager memoryManager;
-    private AddressSpace addressSpace;
+    private IAddressSpace addressSpace;
     
     @BeforeEach
     void setUp() {
@@ -135,7 +135,7 @@ public class AddressSpaceTest {
         addressSpace.writeByte(vaddr, (byte) 0x42);
         
         // 复制地址空间
-        AddressSpace copied = addressSpace.copy();
+        IAddressSpace copied = addressSpace.copy();
         assertNotNull(copied);
         assertNotSame(addressSpace, copied);
         

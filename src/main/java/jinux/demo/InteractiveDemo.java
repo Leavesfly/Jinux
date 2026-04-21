@@ -3,7 +3,7 @@ package jinux.demo;
 import jinux.kernel.Kernel;
 import jinux.kernel.Task;
 import jinux.kernel.Scheduler;
-import jinux.mm.AddressSpace;
+import jinux.mm.IAddressSpace;
 import jinux.ipc.Pipe;
 import jinux.kernel.Signal;
 import jinux.lib.LibC;
@@ -92,7 +92,7 @@ public class InteractiveDemo {
         console.println("  Simulating typical memory allocation sequence...\n");
         
         if (currentTask != null) {
-            AddressSpace addrSpace = currentTask.getAddressSpace();
+            IAddressSpace addrSpace = currentTask.getAddressSpace();
             long initialBrk = addrSpace.getBrk();
             
             console.println("  Initial heap: 0x" + Long.toHexString(initialBrk));

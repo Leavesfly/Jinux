@@ -101,7 +101,7 @@ public class PageTableTest {
         pageTable.map(vpage1, ppage1, flags);
         pageTable.map(vpage2, ppage2, flags);
         
-        PageTable copied = pageTable.copy();
+        PageTable copied = (PageTable) pageTable.copy();
         assertNotNull(copied);
         assertNotSame(pageTable, copied);
         
