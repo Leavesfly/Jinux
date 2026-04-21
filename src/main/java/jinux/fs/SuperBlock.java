@@ -54,6 +54,12 @@ public class SuperBlock {
     /** 是否被修改 */
     private boolean dirty;
     
+    /** 上次分配的 inode 位置（next-fit 优化） */
+    private int lastAllocatedInode;
+    
+    /** 上次分配的 block 位置（next-fit 优化） */
+    private int lastAllocatedBlock;
+    
     // ==================== 文件系统魔数 ====================
     
     /** MINIX 文件系统魔数 */
@@ -78,6 +84,8 @@ public class SuperBlock {
         this.rootInode = null;
         this.mounted = false;
         this.dirty = false;
+        this.lastAllocatedInode = 0;
+        this.lastAllocatedBlock = 0;
     }
     
     /**
@@ -126,13 +134,16 @@ public class SuperBlock {
             return -1;
         }
         
-        for (int i = 0; i < ninodes; i++) {
+        // next-fit：从上次分配位置开始搜索，绕回一圈
+        for (int count = 0; count < ninodes; count++) {
+            int i = (lastAllocatedInode + count) % ninodes;
             int byteIdx = i / 8;
             int bitIdx = i % 8;
             
             if ((inodeBitmap[byteIdx] & (1 << bitIdx)) == 0) {
                 inodeBitmap[byteIdx] |= (1 << bitIdx);
                 dirty = true;
+                lastAllocatedInode = (i + 1) % ninodes;
                 System.out.println("[FS] Allocated inode: " + i);
                 return i;
             }
@@ -177,7 +188,12 @@ public class SuperBlock {
             return -1;
         }
         
-        for (int i = firstDataZone; i < nzones; i++) {
+        // next-fit：从上次分配位置开始搜索，绕回一圈
+        int searchRange = nzones - firstDataZone;
+        int startPos = Math.max(lastAllocatedBlock, firstDataZone);
+        
+        for (int count = 0; count < searchRange; count++) {
+            int i = firstDataZone + ((startPos - firstDataZone + count) % searchRange);
             int byteIdx = i / 8;
             int bitIdx = i % 8;
             
@@ -185,6 +201,7 @@ public class SuperBlock {
                 (zoneBitmap[byteIdx] & (1 << bitIdx)) == 0) {
                 zoneBitmap[byteIdx] |= (1 << bitIdx);
                 dirty = true;
+                lastAllocatedBlock = i + 1;
                 System.out.println("[FS] Allocated block: " + i);
                 return i;
             }

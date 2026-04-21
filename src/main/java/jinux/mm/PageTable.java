@@ -42,7 +42,7 @@ public class PageTable {
      * @param ppage 物理页号
      * @param pageFlags 页面标志
      */
-    public void map(int vpage, int ppage, int pageFlags) {
+    public synchronized void map(int vpage, int ppage, int pageFlags) {
         mappings.put(vpage, ppage);
         flags.put(vpage, pageFlags | PAGE_PRESENT);
     }
@@ -52,7 +52,7 @@ public class PageTable {
      * 
      * @param vpage 虚拟页号
      */
-    public void unmap(int vpage) {
+    public synchronized void unmap(int vpage) {
         mappings.remove(vpage);
         flags.remove(vpage);
     }
@@ -63,7 +63,7 @@ public class PageTable {
      * @param vpage 虚拟页号
      * @return 物理页号，如果不存在返回 -1
      */
-    public int getPhysicalPage(int vpage) {
+    public synchronized int getPhysicalPage(int vpage) {
         Integer ppage = mappings.get(vpage);
         return ppage != null ? ppage : -1;
     }
@@ -74,7 +74,7 @@ public class PageTable {
      * @param vpage 虚拟页号
      * @return 是否已映射
      */
-    public boolean isMapped(int vpage) {
+    public synchronized boolean isMapped(int vpage) {
         return mappings.containsKey(vpage);
     }
     
@@ -84,7 +84,7 @@ public class PageTable {
      * @param vaddr 虚拟地址
      * @return 物理地址，如果未映射返回 -1
      */
-    public long translate(long vaddr) {
+    public synchronized long translate(long vaddr) {
         int vpage = (int) (vaddr >> Const.PAGE_SHIFT);
         int offset = (int) (vaddr & (Const.PAGE_SIZE - 1));
         
@@ -103,7 +103,7 @@ public class PageTable {
      * @param requiredFlags 需要的权限
      * @return 是否有权限
      */
-    public boolean checkPermission(int vpage, int requiredFlags) {
+    public synchronized boolean checkPermission(int vpage, int requiredFlags) {
         Integer pageFlags = flags.get(vpage);
         if (pageFlags == null) {
             return false;
@@ -116,7 +116,7 @@ public class PageTable {
      * 
      * @return 新的页表副本
      */
-    public PageTable copy() {
+    public synchronized PageTable copy() {
         PageTable newTable = new PageTable();
         newTable.mappings.putAll(this.mappings);
         newTable.flags.putAll(this.flags);
@@ -126,7 +126,7 @@ public class PageTable {
     /**
      * 清空页表
      */
-    public void clear() {
+    public synchronized void clear() {
         mappings.clear();
         flags.clear();
     }
@@ -134,7 +134,7 @@ public class PageTable {
     /**
      * 获取已映射的虚拟页数量
      */
-    public int getMappedPageCount() {
+    public synchronized int getMappedPageCount() {
         return mappings.size();
     }
     
@@ -144,7 +144,7 @@ public class PageTable {
      * @param vpage 虚拟页号
      * @return 页面标志，如果不存在返回null
      */
-    public Integer getFlags(int vpage) {
+    public synchronized Integer getFlags(int vpage) {
         return flags.get(vpage);
     }
     
@@ -154,7 +154,7 @@ public class PageTable {
      * @param vpage 虚拟页号
      * @param pageFlags 页面标志
      */
-    public void setFlags(int vpage, int pageFlags) {
+    public synchronized void setFlags(int vpage, int pageFlags) {
         flags.put(vpage, pageFlags);
     }
 }

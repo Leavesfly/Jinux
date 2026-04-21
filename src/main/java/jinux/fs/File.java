@@ -59,14 +59,14 @@ public class File {
     /**
      * 增加引用计数
      */
-    public void incrementRef() {
+    public synchronized void incrementRef() {
         refCount++;
     }
     
     /**
      * 减少引用计数
      */
-    public void decrementRef() {
+    public synchronized void decrementRef() {
         if (refCount > 0) {
             refCount--;
         }
@@ -84,7 +84,7 @@ public class File {
      * @param count 要读取的字节数
      * @return 实际读取的字节数，-1 表示错误
      */
-    public int read(byte[] buf, int count) {
+    public synchronized int read(byte[] buf, int count) {
         if (inode == null) {
             return -9; // EBADF
         }
@@ -130,7 +130,7 @@ public class File {
      * @param count 要写入的字节数
      * @return 实际写入的字节数，-1 表示错误
      */
-    public int write(byte[] buf, int count) {
+    public synchronized int write(byte[] buf, int count) {
         if (inode == null) {
             return -9; // EBADF
         }
@@ -173,7 +173,7 @@ public class File {
     /**
      * 设置文件位置
      */
-    public long lseek(long offset, int whence) {
+    public synchronized long lseek(long offset, int whence) {
         switch (whence) {
             case 0: // SEEK_SET
                 position = offset;
@@ -202,11 +202,11 @@ public class File {
         return mode;
     }
     
-    public long getPosition() {
+    public synchronized long getPosition() {
         return position;
     }
     
-    public void setPosition(long position) {
+    public synchronized void setPosition(long position) {
         this.position = position;
     }
     
@@ -214,7 +214,7 @@ public class File {
         return inode;
     }
     
-    public int getRefCount() {
+    public synchronized int getRefCount() {
         return refCount;
     }
 }

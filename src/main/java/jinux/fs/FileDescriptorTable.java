@@ -42,7 +42,7 @@ public class FileDescriptorTable {
      * @param fd 文件描述符
      * @return 文件对象，不存在返回 null
      */
-    public File get(int fd) {
+    public synchronized File get(int fd) {
         if (fd < 0 || fd >= files.length) {
             return null;
         }
@@ -87,10 +87,12 @@ public class FileDescriptorTable {
     
     /**
      * 关闭所有文件描述符
+     * 正确递减每个文件的引用计数，防止资源泄漏
      */
     public synchronized void closeAll() {
         for (int i = 0; i < files.length; i++) {
             if (files[i] != null) {
+                files[i].decrementRef();
                 files[i] = null;
             }
         }

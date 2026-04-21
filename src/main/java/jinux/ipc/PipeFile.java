@@ -1,5 +1,7 @@
 package jinux.ipc;
 
+import jinux.include.Const;
+
 /**
  * 管道文件描述符包装
  * 将管道包装成可以被文件描述符表使用的对象
@@ -30,7 +32,7 @@ public class PipeFile {
      */
     public int read(byte[] buf, int count) {
         if (!isReadEnd) {
-            return -9; // EBADF
+            return -Const.EBADF;
         }
         return pipe.read(buf, count);
     }
@@ -40,7 +42,7 @@ public class PipeFile {
      */
     public int write(byte[] buf, int count) {
         if (isReadEnd) {
-            return -9; // EBADF
+            return -Const.EBADF;
         }
         return pipe.write(buf, count);
     }

@@ -303,16 +303,49 @@ public class SimpleShell {
     }
     
     /**
-     * 解析命令行（简单空格分割）
+     * 解析命令行，支持单引号和双引号包裹的参数
+     * 例如：echo "hello world" 'foo bar' baz → ["echo", "hello world", "foo bar", "baz"]
      */
     private String[] parseCommandLine(String line) {
         List<String> tokens = new ArrayList<>();
-        String[] parts = line.split("\\s+");
-        for (String part : parts) {
-            if (!part.isEmpty()) {
-                tokens.add(part);
+        StringBuilder current = new StringBuilder();
+        boolean inDoubleQuote = false;
+        boolean inSingleQuote = false;
+        
+        for (int i = 0; i < line.length(); i++) {
+            char ch = line.charAt(i);
+            
+            if (inDoubleQuote) {
+                if (ch == '"') {
+                    inDoubleQuote = false;
+                } else {
+                    current.append(ch);
+                }
+            } else if (inSingleQuote) {
+                if (ch == '\'') {
+                    inSingleQuote = false;
+                } else {
+                    current.append(ch);
+                }
+            } else if (ch == '"') {
+                inDoubleQuote = true;
+            } else if (ch == '\'') {
+                inSingleQuote = true;
+            } else if (Character.isWhitespace(ch)) {
+                if (current.length() > 0) {
+                    tokens.add(current.toString());
+                    current.setLength(0);
+                }
+            } else {
+                current.append(ch);
             }
         }
+        
+        // 添加最后一个 token
+        if (current.length() > 0) {
+            tokens.add(current.toString());
+        }
+        
         return tokens.toArray(new String[0]);
     }
     

@@ -100,10 +100,20 @@ public class AddressSpace {
         long alignedBrk = (newBrk + Const.PAGE_SIZE - 1) & ~(Const.PAGE_SIZE - 1);
         long oldBrk = brk;
         
-        // 分配新页面
+        // 分配新页面，失败时回滚已分配的页面
+        int allocatedFlags = PageTable.PAGE_PRESENT | PageTable.PAGE_RW | PageTable.PAGE_USER;
         for (long addr = oldBrk; addr < alignedBrk; addr += Const.PAGE_SIZE) {
-            if (!allocateAndMap(addr, PageTable.PAGE_PRESENT | PageTable.PAGE_RW | PageTable.PAGE_USER)) {
-                return brk; // 分配失败
+            if (!allocateAndMap(addr, allocatedFlags)) {
+                // 回滚：释放本次已分配的所有页面
+                for (long rollbackAddr = oldBrk; rollbackAddr < addr; rollbackAddr += Const.PAGE_SIZE) {
+                    int vpage = (int) (rollbackAddr >> Const.PAGE_SHIFT);
+                    int ppage = pageTable.getPhysicalPage(vpage);
+                    if (ppage >= 0) {
+                        pageTable.unmap(vpage);
+                        memoryManager.freePage(ppage);
+                    }
+                }
+                return brk; // 分配失败，返回原始 brk
             }
         }
         
@@ -162,7 +172,8 @@ public class AddressSpace {
     }
     
     /**
-     * 读取多个字节
+     * 批量读取多个字节
+     * 按页边界分段，每段直接调用物理内存的批量拷贝，避免逐字节操作
      * 
      * @param vaddr 虚拟地址
      * @param buf 目标缓冲区
@@ -170,22 +181,71 @@ public class AddressSpace {
      * @param len 读取长度
      */
     public void readBytes(long vaddr, byte[] buf, int offset, int len) {
-        for (int i = 0; i < len; i++) {
-            buf[offset + i] = readByte(vaddr + i);
+        int remaining = len;
+        long currentVaddr = vaddr;
+        int currentOffset = offset;
+        
+        while (remaining > 0) {
+            // 计算当前页内可读的字节数
+            int pageOffset = (int) (currentVaddr & (Const.PAGE_SIZE - 1));
+            int chunkSize = Math.min(remaining, Const.PAGE_SIZE - pageOffset);
+            
+            long paddr = pageTable.translate(currentVaddr);
+            if (paddr < 0) {
+                throw new PageFaultException("Page not present at vaddr: 0x" + Long.toHexString(currentVaddr));
+            }
+            
+            memoryManager.getPhysicalMemory().readBytes(paddr, buf, currentOffset, chunkSize);
+            
+            currentVaddr += chunkSize;
+            currentOffset += chunkSize;
+            remaining -= chunkSize;
         }
     }
     
     /**
-     * 写入多个字节
+     * 批量写入多个字节
+     * 按页边界分段，处理 COW 后直接调用物理内存的批量拷贝
      * 
      * @param vaddr 虚拟地址
      * @param buf 源缓冲区
      * @param offset 缓冲区偏移
      * @param len 写入长度
      */
-    public void writeBytes(long vaddr, byte[] buf, int offset, int len) {
-        for (int i = 0; i < len; i++) {
-            writeByte(vaddr + i, buf[offset + i]);
+    public synchronized void writeBytes(long vaddr, byte[] buf, int offset, int len) {
+        int remaining = len;
+        long currentVaddr = vaddr;
+        int currentOffset = offset;
+        
+        while (remaining > 0) {
+            int vpage = (int) (currentVaddr >> Const.PAGE_SHIFT);
+            int pageOffset = (int) (currentVaddr & (Const.PAGE_SIZE - 1));
+            int chunkSize = Math.min(remaining, Const.PAGE_SIZE - pageOffset);
+            
+            // 检查页面权限并处理 COW
+            Integer pageFlags = pageTable.getFlags(vpage);
+            if (pageFlags == null) {
+                throw new PageFaultException("Page not present at vaddr: 0x" + Long.toHexString(currentVaddr));
+            }
+            if ((pageFlags & PageTable.PAGE_COW) != 0) {
+                int newPpage = handleCopyOnWrite(vpage);
+                if (newPpage < 0) {
+                    throw new PageFaultException("Copy-on-write failed at vaddr: 0x" + Long.toHexString(currentVaddr));
+                }
+            } else if ((pageFlags & PageTable.PAGE_RW) == 0) {
+                throw new PageFaultException("Page is read-only at vaddr: 0x" + Long.toHexString(currentVaddr));
+            }
+            
+            long paddr = pageTable.translate(currentVaddr);
+            if (paddr < 0) {
+                throw new PageFaultException("Page not present at vaddr: 0x" + Long.toHexString(currentVaddr));
+            }
+            
+            memoryManager.getPhysicalMemory().writeBytes(paddr, buf, currentOffset, chunkSize);
+            
+            currentVaddr += chunkSize;
+            currentOffset += chunkSize;
+            remaining -= chunkSize;
         }
     }
     

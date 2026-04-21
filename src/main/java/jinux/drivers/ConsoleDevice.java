@@ -23,6 +23,9 @@ public class ConsoleDevice extends CharDevice {
     /** 输入缓冲 */
     private final StringBuilder inputBuffer;
     
+    /** 输入缓冲区最大容量（64KB），防止恶意输入导致 OOM */
+    private static final int MAX_INPUT_BUFFER_SIZE = 64 * 1024;
+    
     /** 输入缓冲锁（保护 inputBuffer 的并发读写） */
     private final Object inputLock = new Object();
     
@@ -53,6 +56,11 @@ public class ConsoleDevice extends CharDevice {
                     String line = input.readLine();
                     if (line == null) {
                         return 0; // EOF
+                    }
+                    // 限制缓冲区大小，防止 OOM
+                    if (inputBuffer.length() + line.length() + 1 > MAX_INPUT_BUFFER_SIZE) {
+                        System.err.println("[CONSOLE] Input buffer overflow, truncating");
+                        inputBuffer.setLength(0);
                     }
                     inputBuffer.append(line).append('\n');
                 }

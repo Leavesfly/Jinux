@@ -79,14 +79,30 @@ public class InitProcess implements Runnable {
         console.println("\n[INIT] Running interactive demonstration...\n");
         InteractiveDemo.runInteractiveDemo(kernel);
         
-        // 启动 Shell
-        console.println("\n[INIT] Starting Simple Shell...");
-        console.println("[INIT] You can now interact with Jinux!\n");
-        
-        SimpleShell shell = new SimpleShell(kernel);
-        shell.run();
-        
-        console.println("[INIT] Shell exited.");
+        // 启动 Shell（退出后自动重启，init 进程不应退出）
+        while (running) {
+            console.println("\n[INIT] Starting Simple Shell...");
+            console.println("[INIT] You can now interact with Jinux!\n");
+            
+            try {
+                SimpleShell shell = new SimpleShell(kernel);
+                shell.run();
+                console.println("[INIT] Shell exited. Restarting in 1 second...");
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception e) {
+                console.println("[INIT] Shell crashed: " + e.getMessage());
+                console.println("[INIT] Restarting Shell in 2 seconds...");
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
         
         console.println("[INIT] Init process exiting...");
     }

@@ -276,7 +276,20 @@ public class Inode {
     }
     
     public int[] getDirectBlocks() {
-        return directBlocks;
+        return java.util.Arrays.copyOf(directBlocks, directBlocks.length);
+    }
+    
+    /**
+     * 设置指定位置的直接块指针
+     * 
+     * @param index 块索引（0-9）
+     * @param blockNo 块号
+     */
+    public void setDirectBlock(int index, int blockNo) {
+        if (index >= 0 && index < directBlocks.length) {
+            directBlocks[index] = blockNo;
+            markDirty();
+        }
     }
     
     public int getIndirectBlock() {

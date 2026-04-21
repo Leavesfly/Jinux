@@ -148,7 +148,7 @@ public class PhysicalMemory {
      * @param paddr 物理地址
      * @return 字节值
      */
-    public byte readByte(long paddr) {
+    public synchronized byte readByte(long paddr) {
         if (paddr < 0 || paddr >= memory.length) {
             throw new IndexOutOfBoundsException("Physical address out of range: 0x" + 
                 Long.toHexString(paddr));
@@ -162,7 +162,7 @@ public class PhysicalMemory {
      * @param paddr 物理地址
      * @param value 字节值
      */
-    public void writeByte(long paddr, byte value) {
+    public synchronized void writeByte(long paddr, byte value) {
         if (paddr < 0 || paddr >= memory.length) {
             throw new IndexOutOfBoundsException("Physical address out of range: 0x" + 
                 Long.toHexString(paddr));
@@ -178,7 +178,7 @@ public class PhysicalMemory {
      * @param offset 缓冲区偏移
      * @param len 读取长度
      */
-    public void readBytes(long paddr, byte[] buf, int offset, int len) {
+    public synchronized void readBytes(long paddr, byte[] buf, int offset, int len) {
         if (paddr < 0 || paddr + len > memory.length) {
             throw new IndexOutOfBoundsException("Physical address range out of bounds");
         }
@@ -193,7 +193,7 @@ public class PhysicalMemory {
      * @param offset 缓冲区偏移
      * @param len 写入长度
      */
-    public void writeBytes(long paddr, byte[] buf, int offset, int len) {
+    public synchronized void writeBytes(long paddr, byte[] buf, int offset, int len) {
         if (paddr < 0 || paddr + len > memory.length) {
             throw new IndexOutOfBoundsException("Physical address range out of bounds");
         }

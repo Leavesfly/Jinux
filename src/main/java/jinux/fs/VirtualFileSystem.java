@@ -468,7 +468,7 @@ public class VirtualFileSystem {
             int[] directBlocks = dir.getDirectBlocks();
             for (int i = 0; i < directBlocks.length; i++) {
                 if (directBlocks[i] == 0) {
-                    directBlocks[i] = newBlock;
+                    dir.setDirectBlock(i, newBlock);
                     break;
                 }
             }
@@ -510,21 +510,22 @@ public class VirtualFileSystem {
         }
         
         // 简化：只写入第一个直接块
-        int[] directBlocks = dir.getDirectBlocks();
-        if (directBlocks[0] == 0) {
+        int blockNo = dir.getDirectBlocks()[0];
+        if (blockNo == 0) {
             // 分配新块
             SuperBlock sb = superBlocks.get(dir.getDev());
             if (sb == null) {
                 return;
             }
-            directBlocks[0] = sb.allocateBlock();
-            if (directBlocks[0] < 0) {
+            blockNo = sb.allocateBlock();
+            if (blockNo < 0) {
                 return;
             }
+            dir.setDirectBlock(0, blockNo);
         }
         
         // 获取缓冲区并写入
-        BufferCache buffer = getBuffer(dir.getDev(), directBlocks[0]);
+        BufferCache buffer = getBuffer(dir.getDev(), blockNo);
         if (buffer != null) {
             byte[] bufData = buffer.getData();
             int len = Math.min(data.length, bufData.length);
@@ -544,6 +545,50 @@ public class VirtualFileSystem {
         if (rootSuperBlock != null) {
             rootSuperBlock.freeBlock(blockNo);
         }
+    }
+    
+    /**
+     * 释放一级间接块指向的所有数据块
+     * 
+     * @param indirectBlockNo 间接块的块号
+     */
+    private void freeIndirectBlocks(int indirectBlockNo) {
+        BufferCache buffer = getBuffer(0, indirectBlockNo);
+        if (buffer == null) {
+            return;
+        }
+        byte[] data = buffer.getData();
+        // 每个块指针占 2 字节（MINIX v1 格式）
+        int pointersPerBlock = Const.BLOCK_SIZE / 2;
+        for (int i = 0; i < pointersPerBlock; i++) {
+            int blockNo = (data[i * 2] & 0xFF) | ((data[i * 2 + 1] & 0xFF) << 8);
+            if (blockNo != 0) {
+                freeBlock(blockNo);
+            }
+        }
+        releaseBuffer(buffer);
+    }
+    
+    /**
+     * 释放二级间接块指向的所有间接块和数据块
+     * 
+     * @param doubleIndirectBlockNo 二级间接块的块号
+     */
+    private void freeDoubleIndirectBlocks(int doubleIndirectBlockNo) {
+        BufferCache buffer = getBuffer(0, doubleIndirectBlockNo);
+        if (buffer == null) {
+            return;
+        }
+        byte[] data = buffer.getData();
+        int pointersPerBlock = Const.BLOCK_SIZE / 2;
+        for (int i = 0; i < pointersPerBlock; i++) {
+            int indirectBlockNo = (data[i * 2] & 0xFF) | ((data[i * 2 + 1] & 0xFF) << 8);
+            if (indirectBlockNo != 0) {
+                freeIndirectBlocks(indirectBlockNo);
+                freeBlock(indirectBlockNo);
+            }
+        }
+        releaseBuffer(buffer);
     }
     
     /**
@@ -667,6 +712,7 @@ public class VirtualFileSystem {
                 if (newBlock < 0) {
                     break; // 无法分配更多块
                 }
+                inode.setDirectBlock(currentBlock, newBlock);
                 directBlocks[currentBlock] = newBlock;
                 inode.markDirty();
             }
@@ -794,7 +840,7 @@ public class VirtualFileSystem {
             return null;
         }
         
-        dir.getDirectBlocks()[0] = blockNo;
+        dir.setDirectBlock(0, blockNo);
         writeDirectory(dir, dirData);
         dir.setSize(32); // . 和 .. 两个目录项
         
@@ -830,12 +876,26 @@ public class VirtualFileSystem {
         
         // 如果链接数为 0，释放 inode 和数据块
         if (newNlink == 0) {
-            // 释放数据块
+            // 释放直接块
             int[] directBlocks = inode.getDirectBlocks();
             for (int block : directBlocks) {
                 if (block != 0) {
                     freeBlock(block);
                 }
+            }
+            
+            // 释放一级间接块及其指向的数据块
+            int indirectBlock = inode.getIndirectBlock();
+            if (indirectBlock != 0) {
+                freeIndirectBlocks(indirectBlock);
+                freeBlock(indirectBlock);
+            }
+            
+            // 释放二级间接块及其指向的所有块
+            int doubleIndirectBlock = inode.getDoubleIndirectBlock();
+            if (doubleIndirectBlock != 0) {
+                freeDoubleIndirectBlocks(doubleIndirectBlock);
+                freeBlock(doubleIndirectBlock);
             }
             
             // 释放 inode
@@ -1062,15 +1122,17 @@ public class VirtualFileSystem {
     
     /**
      * 序列化 inode 到字节数组
-     * 简化实现：只序列化关键字段
+     * 按照 MINIX 文件系统 inode 格式序列化所有字段
+     * 
+     * 布局（32 字节）：
+     *   mode(2) + uid(2) + size(4) + mtime(4) + gid(1) + nlink(1)
+     *   + directBlocks(7*2=14) + indirectBlock(2) + doubleIndirectBlock(2)
      * 
      * @param inode inode 对象
      * @param buf 目标缓冲区
      * @param offset 偏移量
      */
     private void serializeInode(Inode inode, byte[] buf, int offset) {
-        // 简化序列化：只写入关键字段
-        // 实际 Linux 0.01 的 inode 结构更复杂
         int pos = offset;
         
         // mode (2 bytes)
@@ -1095,17 +1157,28 @@ public class VirtualFileSystem {
         buf[pos++] = (byte) ((mtime >> 16) & 0xFF);
         buf[pos++] = (byte) ((mtime >> 24) & 0xFF);
         
-        // 直接块指针 (10 * 2 = 20 bytes)
+        // gid (1 byte)
+        buf[pos++] = (byte) (inode.getGid() & 0xFF);
+        
+        // nlink (1 byte)
+        buf[pos++] = (byte) (inode.getNlink() & 0xFF);
+        
+        // 直接块指针 (7 * 2 = 14 bytes) — MINIX v1 使用 7 个直接块
         int[] directBlocks = inode.getDirectBlocks();
-        for (int i = 0; i < directBlocks.length && i < 10; i++) {
-            int block = directBlocks[i];
+        for (int i = 0; i < 7; i++) {
+            int block = (i < directBlocks.length) ? directBlocks[i] : 0;
             buf[pos++] = (byte) (block & 0xFF);
             buf[pos++] = (byte) ((block >> 8) & 0xFF);
         }
         
-        // 剩余字节填充为 0
-        while (pos < offset + 32) {
-            buf[pos++] = 0;
-        }
+        // 一级间接块指针 (2 bytes)
+        int indirect = inode.getIndirectBlock();
+        buf[pos++] = (byte) (indirect & 0xFF);
+        buf[pos++] = (byte) ((indirect >> 8) & 0xFF);
+        
+        // 二级间接块指针 (2 bytes)
+        int doubleIndirect = inode.getDoubleIndirectBlock();
+        buf[pos++] = (byte) (doubleIndirect & 0xFF);
+        buf[pos++] = (byte) ((doubleIndirect >> 8) & 0xFF);
     }
 }
